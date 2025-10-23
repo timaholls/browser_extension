@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Proxy Connector",
+  "version": "1.0.0",
+  "description": "Автоматическое подключение прокси при запуске браузера",
+  "permissions": [
+    "proxy",
+    "storage",
+    "management",
+    "identity",
+    "tabs",
+    "webRequest",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+

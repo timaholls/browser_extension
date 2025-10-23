@@ -506,13 +506,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'proxyDisconnected') {
     console.log('Получено уведомление об отключении прокси:', request.message);
     
-    // Показываем красивое popup уведомление об ошибке
-    showErrorNotification(request.message);
+    // Показываем специальное уведомление для ошибок прокси
+    showProxyErrorNotification(request.message);
     
     // Дополнительно показываем системное уведомление
     try {
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('🚨 ПРОКСИ ОТКЛЮЧЕН!', {
+        new Notification('🔌 ПРОКСИ НЕ ПОДКЛЮЧЕН!', {
           body: request.message
         });
       }
@@ -819,5 +819,53 @@ function showErrorNotification(message) {
       modal.remove();
     }
   }, 5000);
+}
+
+// Функция для показа уведомления об ошибке прокси
+function showProxyErrorNotification(message) {
+  // Создаем модальное окно для уведомления об ошибке прокси
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    color: white;
+    text-align: center;
+  `;
+  
+  notification.innerHTML = `
+    <div style="font-size: 48px; margin-bottom: 16px;">🔌</div>
+    <div style="font-size: 24px; margin-bottom: 16px; font-weight: bold;">ПРОКСИ НЕ ПОДКЛЮЧЕН!</div>
+    <div style="font-size: 14px; line-height: 1.6; opacity: 0.95;">${(message || 'Прокси не удалось проверить, попробуйте снова.').replace(/\n/g, '<br>')}</div>
+  `;
+  
+  notification.className = 'proxy-error-modal';
+  modal.appendChild(notification);
+  document.body.appendChild(modal);
+  
+  // Автоматически закрываем через 8 секунд
+  setTimeout(() => {
+    if (modal.parentNode) {
+      modal.remove();
+    }
+  }, 8000);
 }
 

@@ -38,9 +38,8 @@ def generate_license_key(client_id: str, days: int = 30) -> dict:
 def save_license_to_file(license_key: str, filename: str = None):
     """Сохраняет лицензию в файл"""
     if filename is None:
-        base_dir = Path.home() / ".config" / "apc_helper"
-        base_dir.mkdir(parents=True, exist_ok=True)
-        filename = base_dir / "license.key"
+        # Сохраняем в текущую директорию проекта
+        filename = "license.key"
     
     filepath = Path(filename)
     filepath.write_text(license_key)
@@ -102,13 +101,13 @@ def main():
         filepath = save_license_to_file(license_data['license_key'])
         print(f"\n✅ Лицензия сохранена в файл: {filepath}")
         print("\n📋 Для активации лицензии:")
-        print("   1. Скопируйте файл license.key на сервер")
+        print("   1. Файл license.key уже в директории проекта")
         print("   2. Перезапустите FastAPI сервер (apc_server.py)")
         print("   3. Перезагрузите расширение в браузере")
     else:
         print("\n📋 Для активации лицензии:")
         print("   1. Скопируйте лицензионный ключ выше")
-        print(f"   2. Создайте файл: ~/.config/apc_helper/license.key")
+        print(f"   2. Создайте файл: license.key в директории проекта")
         print("   3. Вставьте в него лицензионный ключ")
         print("   4. Перезапустите FastAPI сервер")
     

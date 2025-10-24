@@ -12,9 +12,19 @@ from datetime import datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 APP = FastAPI(title="Auto Proxy Connector Helper", version="1.0.0")
+
+# Добавляем CORS middleware
+APP.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Разрешаем все домены
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Middleware для проверки лицензии
@@ -145,7 +155,7 @@ def verify_license_key(license_key: str) -> Dict[str, Any]:
 
 def load_license() -> Dict[str, Any]:
     """Загружает и проверяет лицензию из файла"""
-    license_file = BASE_DIR / "license.key"
+    license_file = Path("license.key")
     
     if not license_file.exists():
         return {"valid": False, "error": "Файл лицензии не найден"}
@@ -159,7 +169,7 @@ def load_license() -> Dict[str, Any]:
 
 def save_license(license_key: str) -> bool:
     """Сохраняет лицензионный ключ в файл"""
-    license_file = BASE_DIR / "license.key"
+    license_file = Path("license.key")
     try:
         license_file.write_text(license_key)
         print(f"✅ Лицензия сохранена в {license_file}")
@@ -203,7 +213,7 @@ def write_config(payload: ApplyPayload) -> None:
     cfg = f"""User tinyproxy
 Group tinyproxy
 Port {payload.listen_port}
-Listen 127.0.0.1
+Listen 0.0.0.0
 Timeout 600
 DefaultErrorFile "/usr/share/tinyproxy/default.html"
 Logfile "{BASE_DIR}/tinyproxy_{payload.listen_port}.log"

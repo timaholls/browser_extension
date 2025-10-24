@@ -1,52 +1,47 @@
 // Флаг режима работы
 const PRODUCTION_MODE = false; // true = продакшен, false = тестирование
 
-// Прямое подключение к прокси без дополнительных серверов
-const PROXY_CONFIG = {
-    // Основной прокси
-    proxy: {
-        host: 'pool.proxy.market',
-        port: 10050,
-        username: 'JhCkljdaqJvL',
-        password: '57MjVdoa'
-    },
-    
-    // Дополнительные профили
-    profiles: {
-        profile1: {
-            host: 'pool.proxy.market',
-            port: 10050,
-            username: 'JhCkljdaqJvL',
-            password: '57MjVdoa',
-            name: 'Profile 1',
-            ip: '93.170.248.211'
-        },
-        profile2: {
-            host: 'pool.proxy.market',
-            port: 10051,
-            username: 'CRlaRkToaY9J',
-            password: '7mEZj019',
-            name: 'Profile 2',
-            ip: '91.188.244.4'
-        },
-        profile3: {
-            host: 'pool.proxy.market',
-            port: 10052,
-            username: 'qoTweJTfbBF5',
-            password: 'qe7C5b1h',
-            name: 'Profile 3',
-            ip: '185.181.245.211'
-        },
-        profile4: {
-            host: 'pool.proxy.market',
-            port: 10053,
-            username: 'd9LfwLJoTpRA',
-            password: 'byRTx5tw',
-            name: 'Profile 4',
-            ip: '188.130.187.174'
-        }
+// Конфигурация прокси (загружается из config.json)
+let PROXY_CONFIG = null;
+
+// Загрузка конфигурации из JSON файла
+async function loadConfig() {
+    try {
+        const response = await fetch(chrome.runtime.getURL('config.json'));
+        const config = await response.json();
+        
+        // Преобразуем конфигурацию в нужный формат
+        const firstProfileKey = Object.keys(config.profiles)[0];
+        const firstProfile = config.profiles[firstProfileKey];
+        
+        PROXY_CONFIG = {
+            proxy: firstProfile.proxy, // Основной прокси (первый профиль)
+            profiles: {}
+        };
+        
+        // Преобразуем профили
+        Object.keys(config.profiles).forEach(key => {
+            const profile = config.profiles[key];
+            PROXY_CONFIG.profiles[key] = {
+                host: profile.proxy.host,
+                port: profile.proxy.port,
+                username: profile.proxy.username,
+                password: profile.proxy.password,
+                name: profile.name,
+                ip: profile.ip,
+                region: profile.region
+            };
+        });
+        
+        console.log('Загруженные профили:', PROXY_CONFIG.profiles);
+        
+        console.log('Конфигурация загружена:', PROXY_CONFIG);
+        return true;
+    } catch (error) {
+        console.error('Ошибка загрузки конфигурации:', error);
+        return false;
     }
-};
+}
 
 // Автоматическая авторизация через webRequestAuthProvider
 function setupAutoAuth() {
@@ -56,44 +51,51 @@ function setupAutoAuth() {
         function(details, callbackFn) {
             console.log('Перехват запроса авторизации:', details);
             
+            // Проверяем что конфигурация загружена
+            if (!PROXY_CONFIG) {
+                console.error('Конфигурация не загружена!');
+                callbackFn({});
+                return;
+            }
+            
             // Определяем профиль по порту
             const port = details.challenger?.port;
             let credentials = null;
             
-            if (port === 10050) {
+            // Динамически ищем профиль по порту
+            let foundProfile = null;
+            let foundProfileKey = null;
+            
+            console.log(`Ищем профиль для порта: ${port}`);
+            console.log('Доступные профили:', Object.keys(PROXY_CONFIG.profiles));
+            
+            for (const [key, profile] of Object.entries(PROXY_CONFIG.profiles)) {
+                console.log(`Проверяем профиль ${key}: порт ${profile.port}`);
+                if (profile.port === port) {
+                    foundProfile = profile;
+                    foundProfileKey = key;
+                    console.log(`✅ Найден профиль ${key} для порта ${port}`);
+                    break;
+                }
+            }
+            
+            if (foundProfile) {
                 credentials = {
-                    username: PROXY_CONFIG.profiles.profile1.username,
-                    password: PROXY_CONFIG.profiles.profile1.password
+                    username: foundProfile.username,
+                    password: foundProfile.password
                 };
-                console.log('Авторизация для Profile 1 (порт 10050)');
-            } else if (port === 10051) {
-                credentials = {
-                    username: PROXY_CONFIG.profiles.profile2.username,
-                    password: PROXY_CONFIG.profiles.profile2.password
-                };
-                console.log('Авторизация для Profile 2 (порт 10051)');
-            } else if (port === 10052) {
-                credentials = {
-                    username: PROXY_CONFIG.profiles.profile3.username,
-                    password: PROXY_CONFIG.profiles.profile3.password
-                };
-                console.log('Авторизация для Profile 3 (порт 10052)');
-            } else if (port === 10053) {
-                credentials = {
-                    username: PROXY_CONFIG.profiles.profile4.username,
-                    password: PROXY_CONFIG.profiles.profile4.password
-                };
-                console.log('Авторизация для Profile 4 (порт 10053)');
+                console.log(`Авторизация для ${foundProfile.name} (порт ${port})`);
             } else {
                 // Fallback на основной профиль
                 credentials = {
                     username: PROXY_CONFIG.proxy.username,
                     password: PROXY_CONFIG.proxy.password
                 };
-                console.log('Авторизация для основного профиля (fallback)');
+                console.log(`Профиль для порта ${port} не найден, используем основной профиль`);
             }
             
             console.log('Подставляем учетные данные:', credentials.username);
+            console.log('Полные учетные данные:', credentials);
             callbackFn({ authCredentials: credentials });
         },
         { urls: ["<all_urls>"] },
@@ -104,10 +106,20 @@ function setupAutoAuth() {
 }
 
 // Настройка прокси через fixed_servers
-function setupProxy(profileKey = 'profile1') {
+function setupProxy(profileKey = null) {
+    // Если профиль не указан, используем первый доступный
+    if (!profileKey) {
+        profileKey = Object.keys(PROXY_CONFIG.profiles)[0];
+    }
+    
     console.log(`Настройка прокси через fixed_servers для ${profileKey}...`);
     
-    const profile = PROXY_CONFIG.profiles[profileKey] || PROXY_CONFIG.profiles.profile1;
+    const profile = PROXY_CONFIG.profiles[profileKey];
+    
+    if (!profile) {
+        console.error(`Профиль ${profileKey} не найден`);
+        return;
+    }
     
     chrome.proxy.settings.set({
         value: {
@@ -126,6 +138,12 @@ function setupProxy(profileKey = 'profile1') {
         console.log(`Прокси настроен через fixed_servers для ${profileKey}`);
         console.log(`Прокси: ${profile.host}:${profile.port}`);
         console.log(`Профиль: ${profile.name} (${profile.ip})`);
+        console.log(`Учетные данные: ${profile.username}:${profile.password}`);
+        
+        // Проверяем настройку прокси
+        chrome.proxy.settings.get({}, (config) => {
+            console.log('Текущие настройки прокси:', config);
+        });
     });
 }
 
@@ -134,11 +152,16 @@ function switchProfile(profileKey) {
     console.log(`Переключение на профиль: ${profileKey}`);
     
     if (!PROXY_CONFIG.profiles[profileKey]) {
-        console.log(`Профиль ${profileKey} не найден, используем profile1`);
-        profileKey = 'profile1';
+        // Используем первый доступный профиль
+        const firstProfileKey = Object.keys(PROXY_CONFIG.profiles)[0];
+        console.log(`Профиль ${profileKey} не найден, используем ${firstProfileKey}`);
+        profileKey = firstProfileKey;
     }
     
     const profile = PROXY_CONFIG.profiles[profileKey];
+    
+    // Настраиваем автоматическую авторизацию
+    setupAutoAuth();
     
     // Настраиваем прокси для выбранного профиля
     setupProxy(profileKey);
@@ -158,6 +181,12 @@ function switchProfile(profileKey) {
     });
     
     console.log(`Переключен на профиль: ${profile.name} (${profile.ip})`);
+    
+    // Запускаем мониторинг для админа тоже
+    console.log(`Запуск мониторинга для админа`);
+    console.log(`Ожидаемый IP для мониторинга: ${profile.ip}`);
+    console.log(`Режим: ${PRODUCTION_MODE ? 'ПРОДАКШЕН' : 'ТЕСТИРОВАНИЕ'}`);
+    startProxyMonitoring(profile.ip);
 }
 
 // Текущее состояние
@@ -180,39 +209,41 @@ let proxyStatus = {
     checkInterval: null
 };
 
-// Авторизация с выбором профиля по паролю
+// Динамическая авторизация с выбором профиля по паролю
 function authenticateUser(password) {
-    let selectedProfile = null;
-    let profileKey = null;
-    
-    switch (password) {
-        case 'user1':
-            profileKey = 'profile1';
-            selectedProfile = PROXY_CONFIG.profiles.profile1;
-            break;
-        case 'user2':
-            profileKey = 'profile2';
-            selectedProfile = PROXY_CONFIG.profiles.profile2;
-            break;
-        case 'user3':
-            profileKey = 'profile3';
-            selectedProfile = PROXY_CONFIG.profiles.profile3;
-            break;
-        case 'user4':
-            profileKey = 'profile4';
-            selectedProfile = PROXY_CONFIG.profiles.profile4;
-            break;
-        default:
-            return null;
+    if (!PROXY_CONFIG) {
+        console.error('Конфигурация не загружена');
+        return null;
     }
     
+    // Проверяем админскую учетку
+    if (password === 'admin123') {
+        console.log(`Админская авторизация: ${password}`);
+        return {
+            type: 'admin',
+            user: {
+                name: 'Администратор',
+                ip: 'Админ',
+                region: 'Админ',
+                port: 'Админ'
+            },
+            profileKey: 'admin',
+            profile: null
+        };
+    }
+    
+    // Динамически ищем профиль по паролю
+    const profileKey = password;
+    const selectedProfile = PROXY_CONFIG.profiles[profileKey];
+    
     if (selectedProfile) {
+        console.log(`Найден профиль для пароля: ${password} -> ${selectedProfile.name}`);
         return {
             type: 'user',
             user: {
                 name: selectedProfile.name,
                 ip: selectedProfile.ip,
-                region: 'Россия',
+                region: selectedProfile.region,
                 port: selectedProfile.port
             },
             profileKey: profileKey,
@@ -220,6 +251,7 @@ function authenticateUser(password) {
         };
     }
     
+    console.log(`Профиль для пароля "${password}" не найден`);
     return null;
 }
 
@@ -426,14 +458,16 @@ function startProxyMonitoring(expectedIP) {
     console.log(`Первая проверка через 5 секунд...`);
 
     setTimeout(async () => {
-        console.log(`Время первой проверки наступило!`);
+        console.log(`⏰ Время первой проверки наступило!`);
         await performProxyCheck();
     }, 5000);
 
     proxyStatus.checkInterval = setInterval(async () => {
-        console.log(`Время периодической проверки наступило!`);
+        console.log(`⏰ Время периодической проверки наступило!`);
         await performProxyCheck();
     }, 60000);
+    
+    console.log(`✅ Мониторинг запущен! Интервал: 60 секунд`);
 }
 
 // Функция для остановки мониторинга прокси
@@ -451,6 +485,12 @@ function stopProxyMonitoring() {
 async function performProxyCheck() {
     if (!proxyStatus.expectedIP) {
         console.log(`Нет ожидаемого IP для проверки`);
+        return;
+    }
+    
+    // Проверяем что мониторинг еще активен
+    if (!proxyStatus.checkInterval) {
+        console.log(`Мониторинг остановлен, пропускаем проверку`);
         return;
     }
 
@@ -492,6 +532,12 @@ async function performProxyCheck() {
             console.log(`Время: ${currentTime}`);
             console.log(`IP адрес: ${status.ip}`);
             console.log(`Ожидался: ${proxyStatus.expectedIP}`);
+            
+            // Автоматически переподключаемся при восстановлении
+            console.log(`Автоматическое переподключение при восстановлении прокси...`);
+            setTimeout(() => {
+                setupDirectProxy();
+            }, 2000);
             console.log(`Подключение работает корректно!`);
         } else {
             console.log(`Статус не изменился: прокси уже был подключен - уведомления не показываем`);
@@ -541,7 +587,8 @@ async function performProxyCheck() {
             console.log(`Прокси отключен из-за ошибки проверки IP`);
         });
 
-        stopProxyMonitoring();
+        // НЕ останавливаем мониторинг - продолжаем проверки каждые 60 секунд
+        console.log(`Мониторинг продолжается - следующая проверка через 60 секунд`);
 
         chrome.storage.local.set({
             proxyEnabled: false,
@@ -589,10 +636,22 @@ async function performProxyCheck() {
 
 // Прямое подключение к прокси с автоматической авторизацией
 async function setupDirectProxy() {
+    if (!PROXY_CONFIG) {
+        console.error('Конфигурация не загружена, пропускаем подключение');
+        return;
+    }
+    
     // Получаем текущий профиль из storage
     chrome.storage.local.get(['currentProfile', 'profileInfo'], (result) => {
-        const profileKey = result.currentProfile || 'profile1';
-        const profile = PROXY_CONFIG.profiles[profileKey] || PROXY_CONFIG.profiles.profile1;
+        let profileKey = result.currentProfile;
+        
+        // Если профиль не найден, используем первый доступный
+        if (!profileKey || !PROXY_CONFIG.profiles[profileKey]) {
+            profileKey = Object.keys(PROXY_CONFIG.profiles)[0];
+            console.log(`Профиль не найден в storage, используем ${profileKey}`);
+        }
+        
+        const profile = PROXY_CONFIG.profiles[profileKey];
         
         console.log(`Настройка прямого подключения к прокси с автоматической авторизацией`);
         console.log(`Профиль: ${profile.name} (${profile.ip})`);
@@ -659,29 +718,65 @@ async function setupDirectProxy() {
 
 // Автоматическое подключение при установке расширения
 chrome.runtime.onInstalled.addListener(async (details) => {
-    console.log('Расширение установлено - автоматическое подключение');
-    // При установке сразу подключаемся без авторизации
-    setupDirectProxy();
+    console.log('Расширение установлено - загрузка конфигурации');
+    
+    // Загружаем конфигурацию
+    const configLoaded = await loadConfig();
+    if (configLoaded) {
+        console.log('Конфигурация загружена');
+        console.log('Ожидаем авторизации пользователя');
+    } else {
+        console.error('Не удалось загрузить конфигурацию');
+    }
 });
 
 // Автоматическое подключение при запуске браузера
 chrome.runtime.onStartup.addListener(async () => {
-    console.log('Браузер запущен - автоматическое подключение');
-    // При запуске браузера сразу подключаемся без авторизации
-    setupDirectProxy();
+    console.log('Браузер запущен - загрузка конфигурации');
+    
+    // Загружаем конфигурацию
+    const configLoaded = await loadConfig();
+    if (configLoaded) {
+        console.log('Конфигурация загружена');
+        
+        // Проверяем есть ли сохраненная авторизация
+        chrome.storage.local.get(['isAuthenticated', 'authTime'], (result) => {
+            const now = Date.now();
+            const authTime = result.authTime || 0;
+            const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
+            const isAuthValid = !!(result.isAuthenticated && (now - authTime) < sessionTimeout);
+            
+            if (isAuthValid) {
+                console.log('Найдена валидная авторизация, автоматическое подключение');
+                setupDirectProxy();
+            } else {
+                console.log('Авторизация не найдена или истекла, ожидаем ввода пароля');
+            }
+        });
+    } else {
+        console.error('Не удалось загрузить конфигурацию');
+    }
 });
 
 // Восстановление мониторинга при инициализации расширения
 async function restoreProxyMonitoring() {
     try {
-        const data = await chrome.storage.local.get(['proxyEnabled', 'currentProfile', 'proxyStatus']);
+        const data = await chrome.storage.local.get(['proxyEnabled', 'currentProfile', 'proxyStatus', 'isAuthenticated', 'authTime']);
 
-        if (data.proxyEnabled && data.currentProfile && data.proxyStatus && data.proxyStatus.expectedIP) {
+        // Проверяем авторизацию
+        const now = Date.now();
+        const authTime = data.authTime || 0;
+        const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
+        const isAuthValid = !!(data.isAuthenticated && (now - authTime) < sessionTimeout);
+
+        if (isAuthValid && data.proxyEnabled && data.currentProfile && data.proxyStatus && data.proxyStatus.expectedIP) {
             console.log('Восстановление мониторинга прокси после перезапуска');
             console.log(`Профиль: ${data.currentProfile}`);
             console.log(`Ожидаемый IP: ${data.proxyStatus.expectedIP}`);
 
             startProxyMonitoring(data.proxyStatus.expectedIP);
+        } else {
+            console.log('Авторизация не найдена или истекла, мониторинг не восстанавливается');
         }
     } catch (error) {
         console.log('Ошибка восстановления мониторинга:', error);
@@ -692,8 +787,19 @@ async function restoreProxyMonitoring() {
 restoreProxyMonitoring();
 
 // Отслеживание изменений профиля
-chrome.management.onEnabled.addListener((info) => {
+chrome.management.onEnabled.addListener(async (info) => {
     console.log('Профиль изменен, переподключаем прокси...');
+    
+    // Проверяем что конфигурация загружена
+    if (!PROXY_CONFIG) {
+        console.log('Конфигурация не загружена, загружаем...');
+        const configLoaded = await loadConfig();
+        if (!configLoaded) {
+            console.error('Не удалось загрузить конфигурацию');
+            return;
+        }
+    }
+    
     isConnecting = false;
     connectionRetryCount = 0;
     setupDirectProxy();
@@ -733,7 +839,16 @@ chrome.proxy.onProxyError.addListener((details) => {
 
         if (isCriticalError && connectionRetryCount <= 3) {
             console.log(`Критическая ошибка прокси, попытка переподключения ${connectionRetryCount}/3`);
-            setTimeout(() => {
+            setTimeout(async () => {
+                // Проверяем что конфигурация загружена
+                if (!PROXY_CONFIG) {
+                    console.log('Конфигурация не загружена, загружаем...');
+                    const configLoaded = await loadConfig();
+                    if (!configLoaded) {
+                        console.error('Не удалось загрузить конфигурацию');
+                        return;
+                    }
+                }
                 setupDirectProxy();
             }, 10000);
         } else if (connectionRetryCount > 3) {
@@ -766,13 +881,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
             const isAuthValid = !!(result.isAuthenticated && (nowTs - authTime) < sessionTimeout);
 
+            // Для админа возвращаем все доступные профили
+            let availableProfiles = [];
+            if (result.userType === 'admin' && PROXY_CONFIG) {
+                availableProfiles = Object.keys(PROXY_CONFIG.profiles).map(key => ({
+                    key,
+                    name: PROXY_CONFIG.profiles[key].name,
+                    ip: PROXY_CONFIG.profiles[key].ip,
+                    port: PROXY_CONFIG.profiles[key].port,
+                    region: PROXY_CONFIG.profiles[key].region
+                }));
+            }
+
             sendResponse({
                 currentProfile: result.currentProfile,
                 profileInfo: result.profileInfo,
                 isAuthenticated: isAuthValid,
                 userType: result.userType,
                 userName: result.currentUser?.name,
-                availableProfiles: [],
+                availableProfiles: availableProfiles,
                 proxyStatus: result.proxyStatus || {connected: false, realIP: null, expectedIP: null},
             });
         });
@@ -782,6 +909,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'autoConnect') {
         if (!isAuthenticated) {
             sendResponse({success: false, message: 'Требуется авторизация'});
+            return;
+        }
+
+        if (!PROXY_CONFIG) {
+            sendResponse({success: false, message: 'Конфигурация не загружена'});
             return;
         }
 
@@ -797,6 +929,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return;
         }
 
+        if (!PROXY_CONFIG) {
+            sendResponse({success: false, message: 'Конфигурация не загружена'});
+            return;
+        }
+
         console.log('Переключение профиля:', request.profileKey);
         switchProfile(request.profileKey);
         sendResponse({success: true, message: `Переключен на ${request.profileKey}`});
@@ -804,6 +941,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'getProfiles') {
+        if (!PROXY_CONFIG) {
+            sendResponse({
+                success: false,
+                message: 'Конфигурация не загружена'
+            });
+            return true;
+        }
+        
         const profiles = Object.keys(PROXY_CONFIG.profiles).map(key => ({
             key,
             name: PROXY_CONFIG.profiles[key].name,
@@ -884,14 +1029,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
                 });
 
-                // Уведомляем popup об отключении
-                chrome.runtime.sendMessage({
-                    action: 'proxyDisconnected',
-                    message: 'ПрокСИ ОТКЛЮЧЕН!\n\nВыход из системы выполнен.\nПрокси отключен.',
-                    showRetryButton: false
-                }).catch(() => {
-                    console.log('Popup не открыт, уведомление не отправлено');
-                });
+                // Уведомление об отключении отправит мониторинг
+                console.log('Прокси отключен при выходе из системы');
             });
 
             // Очищаем все данные
@@ -930,11 +1069,15 @@ function completeAuthentication(userInfo, sendResponse) {
             console.log('Авторизация сохранена в storage');
             console.log(`Выбран профиль: ${userInfo.user.name} (${userInfo.user.ip})`);
 
-            // Автоматически подключаем прокси после авторизации с небольшой задержкой
-            setTimeout(() => {
-                console.log('Автоматическое подключение после авторизации...');
-                setupAutoProxy(true); // Принудительное подключение после авторизации
-            }, 1000);
+            // Автоматически подключаем прокси только для обычных пользователей
+            if (userInfo.type === 'user') {
+                setTimeout(() => {
+                    console.log('Автоматическое подключение после авторизации...');
+                    setupDirectProxy(); // Принудительное подключение после авторизации
+                }, 1000);
+            } else {
+                console.log('Админская авторизация - ожидаем выбора профиля');
+            }
         });
     });
 
@@ -967,7 +1110,28 @@ chrome.runtime.onSuspend.addListener(async () => {
 // Инициализация при загрузке
 (async () => {
     console.log('Инициализация расширения...');
-    console.log('Расширение запущено - автоматическое подключение');
-    // При загрузке расширения сразу подключаемся без авторизации
-    setupDirectProxy();
+    console.log('Расширение запущено - загрузка конфигурации');
+    
+    // Загружаем конфигурацию
+    const configLoaded = await loadConfig();
+    if (configLoaded) {
+        console.log('Конфигурация загружена');
+        
+        // Проверяем есть ли сохраненная авторизация
+        chrome.storage.local.get(['isAuthenticated', 'authTime'], (result) => {
+            const now = Date.now();
+            const authTime = result.authTime || 0;
+            const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
+            const isAuthValid = !!(result.isAuthenticated && (now - authTime) < sessionTimeout);
+            
+            if (isAuthValid) {
+                console.log('Найдена валидная авторизация, автоматическое подключение');
+                setupDirectProxy();
+            } else {
+                console.log('Авторизация не найдена или истекла, ожидаем ввода пароля');
+            }
+        });
+    } else {
+        console.error('Не удалось загрузить конфигурацию');
+    }
 })();

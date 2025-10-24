@@ -17,8 +17,14 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background_direct.js"
+    "service_worker": "background_direct_new.js"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["config.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html"
   }

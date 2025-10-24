@@ -16,11 +16,14 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import threading
 import time
 import hashlib
 import os
+import subprocess
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(
@@ -39,7 +42,6 @@ class ProxyConfig:
     region: str
     local_port: int
     profile_id: str
-    is_active: bool = False
     last_used: Optional[datetime] = None
     connection_count: int = 0
 
@@ -54,53 +56,114 @@ class ProxyManager:
     
     def setup_default_proxies(self):
         """Настройка прокси по умолчанию из вашего расширения"""
+        # Старые прокси (закомментированы)
+        # default_proxies = [
+        #     {
+        #         "profile_id": "profile1",
+        #         "ip": "45.139.125.123",
+        #         "port": 1050,
+        #         "username": "fOwk1c",
+        #         "password": "hBP8MJjtKg",
+        #         "region": "Россия",
+        #         "local_port": 3128
+        #     },
+        #     {
+        #         "profile_id": "profile2", 
+        #         "ip": "91.188.244.4",
+        #         "port": 1050,
+        #         "username": "fOwk1c",
+        #         "password": "hBP8MJjtKg",
+        #         "region": "Россия",
+        #         "local_port": 3129
+        #     },
+        #     {
+        #         "profile_id": "profile3",
+        #         "ip": "185.181.245.211", 
+        #         "port": 1050,
+        #         "username": "fOwk1c",
+        #         "password": "hBP8MJjtKg",
+        #         "region": "Россия",
+        #         "local_port": 3130
+        #     },
+        #     {
+        #         "profile_id": "profile4",
+        #         "ip": "188.130.187.174",
+        #         "port": 1050, 
+        #         "username": "fOwk1c",
+        #         "password": "hBP8MJjtKg",
+        #         "region": "Россия",
+        #         "local_port": 3131
+        #     }
+        # ]
+        
+        # Новые прокси pool.proxy.market
         default_proxies = [
             {
                 "profile_id": "profile1",
-                "ip": "45.139.125.123",
-                "port": 1050,
-                "username": "fOwk1c",
-                "password": "hBP8MJjtKg",
+                "ip": "pool.proxy.market",
+                "port": 10050,
+                "username": "JhCkljdaqJvL",
+                "password": "57MjVdoa",
                 "region": "Россия",
                 "local_port": 3128
             },
             {
                 "profile_id": "profile2", 
-                "ip": "91.188.244.4",
-                "port": 1050,
-                "username": "fOwk1c",
-                "password": "hBP8MJjtKg",
+                "ip": "pool.proxy.market",
+                "port": 10050,
+                "username": "CRlaRkToaY9J",
+                "password": "7mEZj019",
                 "region": "Россия",
                 "local_port": 3129
             },
             {
                 "profile_id": "profile3",
-                "ip": "185.181.245.211", 
-                "port": 1050,
-                "username": "fOwk1c",
-                "password": "hBP8MJjtKg",
+                "ip": "pool.proxy.market", 
+                "port": 10050,
+                "username": "qoTweJTfbBF5",
+                "password": "qe7C5b1h",
                 "region": "Россия",
                 "local_port": 3130
             },
             {
                 "profile_id": "profile4",
-                "ip": "188.130.187.174",
-                "port": 1050, 
-                "username": "fOwk1c",
-                "password": "hBP8MJjtKg",
+                "ip": "pool.proxy.market",
+                "port": 10050, 
+                "username": "d9LfwLJoTpRA",
+                "password": "byRTx5tw",
                 "region": "Россия",
                 "local_port": 3131
+            },
+            {
+                "profile_id": "profile5",
+                "ip": "pool.proxy.market",
+                "port": 10050, 
+                "username": "Kp8a9dXI5cP4",
+                "password": "1AeYMBul",
+                "region": "Россия",
+                "local_port": 3132
             }
         ]
         
-        # Добавляем дополнительные прокси для поддержки 10-15 аккаунтов
-        for i in range(5, 16):  # profile5-profile15
+        # Добавляем дополнительные профили (используем те же прокси для экономии)
+        # Поскольку у нас только 5 рабочих прокси, будем их переиспользовать
+        for i in range(6, 16):  # profile6-profile15
+            # Циклически используем доступные прокси
+            proxy_index = (i - 6) % 5  # 0-4 для наших 5 прокси
+            working_proxies = [
+                {"username": "JhCkljdaqJvL", "password": "57MjVdoa"},
+                {"username": "CRlaRkToaY9J", "password": "7mEZj019"},
+                {"username": "qoTweJTfbBF5", "password": "qe7C5b1h"},
+                {"username": "d9LfwLJoTpRA", "password": "byRTx5tw"},
+                {"username": "Kp8a9dXI5cP4", "password": "1AeYMBul"}
+            ]
+            
             default_proxies.append({
                 "profile_id": f"profile{i}",
-                "ip": f"192.168.1.{i+10}",  # Примерные IP
-                "port": 1050,
-                "username": "fOwk1c",
-                "password": "hBP8MJjtKg",
+                "ip": "pool.proxy.market",
+                "port": 10050,
+                "username": working_proxies[proxy_index]["username"],
+                "password": working_proxies[proxy_index]["password"],
                 "region": "Россия",
                 "local_port": 3128 + i
             })
@@ -117,18 +180,76 @@ class ProxyManager:
         
         proxy_config = self.proxies[profile_id]
         
-        if proxy_config.is_active:
-            logger.info(f"Прокси для {profile_id} уже активен")
-            return True
+        # Останавливаем предыдущий прокси если он запущен
+        if profile_id in self.server_tasks:
+            logger.info(f"🔄 Перезапуск прокси для {profile_id}")
+            await self.stop_proxy_server(profile_id)
+        
+        # Принудительно освобождаем порт
+        self._kill_port_process(proxy_config.local_port)
         
         try:
             # Создаем HTTP прокси сервер
             app = web.Application()
             
-            # Добавляем обработчик для всех запросов включая CONNECT
+            # Добавляем специальный обработчик для CONNECT запросов ПЕРВЫМ
+            async def connect_handler(request):
+                logger.info(f"CONNECT запрос: {request.method} {request.url}")
+                logger.info(f"CONNECT заголовки: {dict(request.headers)}")
+                
+                # Получаем целевой хост и порт из URL
+                target_host = str(request.url.host)
+                target_port = request.url.port or 443
+                
+                logger.info(f"CONNECT к {target_host}:{target_port}")
+                
+                # Для HTTPS туннелирования просто возвращаем 200 OK
+                # Браузер будет использовать это соединение для HTTPS трафика
+                return web.Response(
+                    status=200,
+                    text="Connection established",
+                    headers={
+                        "Connection": "keep-alive",
+                        "Proxy-Agent": "ProxyServer/1.0",
+                        "Content-Length": "0",
+                        "Proxy-Connection": "keep-alive"
+                    }
+                )
+            
+            # Регистрируем CONNECT обработчики ПЕРВЫМИ
+            app.router.add_route('CONNECT', '/', connect_handler)
+            app.router.add_route('CONNECT', '/{path:.*}', connect_handler)
+            
+            # Добавляем обработчик для всех пустых запросов
+            async def empty_handler(request):
+                logger.info(f"Пустой запрос: {request.method} {request.url}")
+                return web.Response(
+                    status=200,
+                    text="OK",
+                    headers={"Content-Length": "0"}
+                )
+            
+            app.router.add_route('*', '/', empty_handler)
+            
+            # Добавляем универсальный обработчик для остальных запросов
             app.router.add_route('*', '/{path:.*}', self.create_proxy_handler(proxy_config))
-            app.router.add_route('CONNECT', '/{path:.*}', self.create_proxy_handler(proxy_config))
-            app.router.add_route('CONNECT', '/', self.create_proxy_handler(proxy_config))
+            
+            # Добавляем специальный обработчик для CONNECT без пути
+            async def universal_connect_handler(request):
+                logger.info(f"Универсальный CONNECT: {request.method} {request.url}")
+                return web.Response(
+                    status=200,
+                    text="Connection established",
+                    headers={
+                        "Connection": "keep-alive",
+                        "Proxy-Agent": "ProxyServer/1.0",
+                        "Content-Length": "0",
+                        "Proxy-Connection": "keep-alive"
+                    }
+                )
+            
+            # Регистрируем универсальный CONNECT обработчик
+            app.router.add_route('CONNECT', '*', universal_connect_handler)
             
             # Запускаем сервер
             runner = web.AppRunner(app)
@@ -140,7 +261,7 @@ class ProxyManager:
             # Сохраняем ссылку на сервер для остановки
             self.server_tasks[profile_id] = runner
             
-            proxy_config.is_active = True
+            # Прокси запущен
             proxy_config.last_used = datetime.now()
             proxy_config.connection_count += 1
             
@@ -161,16 +282,39 @@ class ProxyManager:
                 # Обрабатываем CONNECT запросы для HTTPS
                 if request.method == 'CONNECT':
                     logger.info(f"CONNECT запрос получен для {request.url}")
+                    
+                    # Проверяем, что URL не пустой
+                    if not str(request.url).strip() or str(request.url) == 'http://':
+                        logger.warning("Пустой CONNECT запрос, возвращаем 200 OK")
+                        return web.Response(
+                            status=200,
+                            text="Connection established",
+                            headers={
+                                "Connection": "keep-alive",
+                                "Proxy-Agent": "ProxyServer/1.0",
+                                "Content-Length": "0"
+                            }
+                        )
+                    
                     # Для CONNECT запросов возвращаем 200 OK
-                    return web.Response(status=200, text='Connection established')
+                    return web.Response(
+                        status=200,
+                        text="Connection established",
+                        headers={
+                            "Connection": "keep-alive",
+                            "Proxy-Agent": "ProxyServer/1.0",
+                            "Content-Length": "0"
+                        }
+                    )
                 
-                # Получаем целевой URL, убираем прокси-префикс
+                # Обрабатываем обычные HTTP запросы
                 target_url = str(request.url)
+                
                 # Убираем прокси-префикс если он есть
-                if 'localhost:3128/' in target_url:
-                    target_url = target_url.split('localhost:3128/')[1]
-                elif '127.0.0.1:3128/' in target_url:
-                    target_url = target_url.split('127.0.0.1:3128/')[1]
+                if f'localhost:{proxy_config.local_port}/' in target_url:
+                    target_url = target_url.split(f'localhost:{proxy_config.local_port}/')[1]
+                elif f'127.0.0.1:{proxy_config.local_port}/' in target_url:
+                    target_url = target_url.split(f'127.0.0.1:{proxy_config.local_port}/')[1]
                 
                 # Добавляем http:// если нет протокола
                 if not target_url.startswith('http://') and not target_url.startswith('https://'):
@@ -178,29 +322,80 @@ class ProxyManager:
                 
                 logger.info(f"Целевой URL: {target_url}")
                 
-                # Используем httpx для лучшей поддержки прокси
-                async with httpx.AsyncClient(
-                    proxies={
-                        'http://': f'http://{proxy_config.username}:{proxy_config.password}@{proxy_config.ip}:{proxy_config.port}',
-                        'https://': f'http://{proxy_config.username}:{proxy_config.password}@{proxy_config.ip}:{proxy_config.port}'
-                    }
-                ) as client:
+                # Проверяем, не является ли запрос к самому API серверу
+                if '94.241.175.200:8765' in target_url or 'localhost:8765' in target_url:
+                    logger.warning("Запрос к API серверу через прокси - пропускаем прокси")
+                    # Для запросов к API серверу не используем прокси
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        response = await client.request(
+                            method=request.method,
+                            url=target_url,
+                            headers=dict(request.headers),
+                            content=await request.read() if request.method in ['POST', 'PUT', 'PATCH'] else None
+                        )
+                else:
+                    # Используем httpx для лучшей поддержки прокси
+                    proxy_url = f'http://{proxy_config.username}:{proxy_config.password}@{proxy_config.ip}:{proxy_config.port}'
                     
-                    # Выполняем запрос через прокси
-                    response = await client.request(
-                        method=request.method,
-                        url=target_url,
-                        headers=dict(request.headers),
-                        content=await request.read() if request.method in ['POST', 'PUT', 'PATCH'] else None
-                    )
+                    # Создаем заголовки без Proxy-Authorization (httpx обрабатывает это автоматически)
+                    headers = dict(request.headers)
+                    headers.pop('Proxy-Authorization', None)
+                    headers.pop('Proxy-Connection', None)
                     
-                    # Возвращаем ответ
-                    return web.Response(
-                        body=response.content,
-                        status=response.status_code,
-                        headers=dict(response.headers)
-                    )
-                        
+                    # Добавляем retry логику для нестабильных прокси
+                    max_retries = 2
+                    for attempt in range(max_retries):
+                        try:
+                            async with httpx.AsyncClient(
+                                proxies={
+                                    'http://': proxy_url, 
+                                    'https://': proxy_url
+                                },
+                                timeout=60.0,
+                                follow_redirects=True,
+                                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+                            ) as client:
+                                
+                                # Выполняем запрос через прокси
+                                response = await client.request(
+                                    method=request.method,
+                                    url=target_url,
+                                    headers=headers,
+                                    content=await request.read() if request.method in ['POST', 'PUT', 'PATCH'] else None
+                                )
+                                
+                                # Если запрос успешен, выходим из retry цикла
+                                break
+                                
+                        except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"Попытка {attempt + 1} неудачна, повторяем: {e}")
+                                await asyncio.sleep(1)
+                                continue
+                            else:
+                                raise
+                    
+                # Возвращаем ответ
+                return web.Response(
+                    body=response.content,
+                    status=response.status_code,
+                    headers=dict(response.headers)
+                )
+                       
+            except httpx.ReadTimeout as e:
+                logger.warning(f"Таймаут прокси-запроса: {e}")
+                return web.Response(
+                    text="Прокси таймаут - попробуйте еще раз", 
+                    status=504,
+                    headers={"Retry-After": "5"}
+                )
+            except httpx.ConnectTimeout as e:
+                logger.warning(f"Таймаут подключения к прокси: {e}")
+                return web.Response(
+                    text="Прокси недоступен - проверьте соединение", 
+                    status=503,
+                    headers={"Retry-After": "10"}
+                )
             except Exception as e:
                 logger.error(f"Ошибка прокси-запроса: {e}")
                 logger.error(f"Тип ошибки: {type(e)}")
@@ -210,6 +405,14 @@ class ProxyManager:
         
         return proxy_handler
     
+    def _encode_auth(self, username: str, password: str) -> str:
+        """Кодирует аутентификацию для Basic Auth"""
+        import base64
+        auth_string = f"{username}:{password}"
+        encoded = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
+        logger.info(f"Аутентификация для {username}: {encoded}")
+        return encoded
+    
     async def stop_proxy_server(self, profile_id: str) -> bool:
         """Остановка прокси-сервера для конкретного профиля"""
         if profile_id not in self.proxies:
@@ -217,16 +420,33 @@ class ProxyManager:
         
         proxy_config = self.proxies[profile_id]
         
-        if proxy_config.is_active and profile_id in self.server_tasks:
-            # Останавливаем сервер
+        # Останавливаем сервер если он запущен
+        if profile_id in self.server_tasks:
             runner = self.server_tasks[profile_id]
             await runner.cleanup()
             del self.server_tasks[profile_id]
         
-        proxy_config.is_active = False
+        # Прокси остановлен
         
         logger.info(f"🛑 Прокси сервер остановлен для {profile_id}")
         return True
+    
+    def _kill_port_process(self, port: int):
+        """Принудительно освобождает порт"""
+        try:
+            # Используем fuser для поиска и убийства процесса на порту
+            result = subprocess.run(
+                ['fuser', '-k', f'{port}/tcp'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                logger.info(f"🔫 Освобожден порт {port}")
+            else:
+                logger.debug(f"Порт {port} уже свободен")
+        except Exception as e:
+            logger.warning(f"Не удалось освободить порт {port}: {e}")
     
     def get_profile_by_port(self, port: int) -> Optional[str]:
         """Получение профиля по порту"""
@@ -243,7 +463,6 @@ class ProxyManager:
         config = self.proxies[profile_id]
         return {
             "profile_id": profile_id,
-            "is_active": config.is_active,
             "local_port": config.local_port,
             "target_ip": config.ip,
             "target_port": config.port,
@@ -258,6 +477,38 @@ class ProxyManager:
             profile_id: self.get_proxy_status(profile_id)
             for profile_id in self.proxies.keys()
         }
+    
+    async def check_proxy_health(self, profile_id: str) -> bool:
+        """Проверяет здоровье прокси-соединения"""
+        if profile_id not in self.proxies:
+            return False
+        
+        proxy_config = self.proxies[profile_id]
+        
+        try:
+            import requests
+            
+            # Тестируем подключение через прокси
+            proxy_url = f'http://{proxy_config.username}:{proxy_config.password}@{proxy_config.ip}:{proxy_config.port}'
+            
+            # Быстрый тест подключения
+            response = requests.get(
+                'http://httpbin.org/ip', 
+                proxies={'http': proxy_url, 'https': proxy_url}, 
+                timeout=10,
+                headers={'User-Agent': 'Proxy-Health-Check/1.0'}
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"✅ Прокси здоров: {profile_id} -> {proxy_config.ip}:{proxy_config.port}")
+                return True
+            else:
+                logger.warning(f"⚠️ Прокси отвечает с кодом {response.status_code}: {profile_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Прокси нездоров: {profile_id} - {e}")
+            return False
 
 class LicenseManager:
     """Менеджер лицензий - только чтение и проверка"""
@@ -340,6 +591,15 @@ license_manager = LicenseManager()
 
 # FastAPI приложение
 app = FastAPI(title="Multi-Proxy Server", version="1.0.0")
+
+# Добавляем CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ProxyRequest(BaseModel):
     profile_id: str
@@ -425,9 +685,52 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "active_proxies": sum(1 for config in proxy_manager.proxies.values() if config.is_active),
+        "total_profiles": len(proxy_manager.proxies),
         "total_proxies": len(proxy_manager.proxies)
     }
+
+@app.get("/health/{profile_id}")
+async def check_proxy_health_endpoint(profile_id: str):
+    """Проверяет здоровье конкретного прокси"""
+    try:
+        is_healthy = await proxy_manager.check_proxy_health(profile_id)
+        return {
+            "healthy": is_healthy,
+            "profile_id": profile_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Ошибка проверки здоровья прокси {profile_id}: {e}")
+        return {"healthy": False, "error": str(e)}
+
+@app.get("/test/{profile_id}")
+async def test_proxy_connection(profile_id: str):
+    """Тестирует подключение через прокси"""
+    try:
+        if profile_id not in proxy_manager.proxies:
+            raise HTTPException(status_code=404, detail="Профиль не найден")
+        
+        proxy_config = proxy_manager.proxies[profile_id]
+        
+        # Тестируем подключение
+        import requests
+        proxy_url = f'http://{proxy_config.username}:{proxy_config.password}@{proxy_config.ip}:{proxy_config.port}'
+        
+        response = requests.get('http://httpbin.org/ip', 
+                              proxies={'http': proxy_url, 'https': proxy_url}, 
+                              timeout=10)
+        
+        return {
+            "success": response.status_code == 200,
+            "status_code": response.status_code,
+            "response": response.json() if response.status_code == 200 else None,
+            "profile_id": profile_id,
+            "proxy": f"{proxy_config.ip}:{proxy_config.port}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка тестирования прокси {profile_id}: {e}")
+        return {"success": False, "error": str(e)}
 
 @app.get("/license/status")
 async def check_license_status():

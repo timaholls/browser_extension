@@ -450,6 +450,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'proxyStatusChanged') {
     console.log('Получено уведомление об изменении статуса прокси:', request.proxyStatus);
     updateProxyStatus(request.proxyStatus);
+  } else if (request.action === 'requestPassword') {
+    // Запрос пароля от background script
+    const { username, profileName } = request;
+    console.log(`Запрос пароля для пользователя ${username}`);
+    
+    // Показываем диалог запроса пароля
+    const password = prompt(`Введите пароль для пользователя ${username} (${profileName}):`);
+    if (password) {
+      // Отправляем пароль обратно в background
+      chrome.runtime.sendMessage({
+        action: 'setPassword',
+        username: username,
+        password: password
+      });
+    }
+    
   } else if (request.action === 'proxyConnected') {
     console.log('Получено уведомление об успешном подключении:', request.message);
     

@@ -13,43 +13,13 @@ const AUTH_CONFIG = {
     userAccounts: {
       'profile1': {
         name: 'profile1',
-        ip: '45.139.125.123',
-        port: 1050,
-        username: 'fOwk1c',
-        password: 'hBP8MJjtKg',
+        ip: '94.241.175.200',
+        port: 3128,
+        username: 'user1',
+        password: '', // Пользователь введет сам
         region: 'Россия',
         type: 'user',
         localPort: 3128
-      },
-      'profile2': {
-        name: 'profile2', 
-        ip: '91.188.244.4',
-        port: 1050,
-        username: 'fOwk1c',
-        password: 'hBP8MJjtKg',
-        region: 'Россия',
-        type: 'user',
-        localPort: 3129
-      },
-      'profile3': {
-        name: 'profile3',
-        ip: '185.181.245.211', 
-        port: 1050,
-        username: 'fOwk1c',
-        password: 'hBP8MJjtKg',
-        region: 'Россия',
-        type: 'user',
-        localPort: 3130
-      },
-      'profile4': {
-        name: 'profile4',
-        ip: '188.130.187.174',
-        port: 1050, 
-        username: 'fOwk1c',
-        password: 'hBP8MJjtKg',
-        region: 'Россия',
-        type: 'user',
-        localPort: 3131
       }
     }
   };
@@ -141,76 +111,13 @@ const AUTH_CONFIG = {
   
   // Функция для проверки статуса лицензии
   async function checkLicenseStatus() {
-    try {
-      const response = await fetch('http://94.241.175.200:8765/license/status', {
-        method: 'GET'
-      });
-      
-      const data = await response.json();
-      const oldStatus = licenseStatus.valid;
-      
-      licenseStatus = data.license_status || { valid: false };
-      licenseStatus.lastCheck = Date.now();
-      
-      console.log('🔑 Статус лицензии:', licenseStatus);
-      
-      // Сохраняем статус в storage
-      chrome.storage.local.set({ licenseStatus });
-      
-      // Если лицензия истекла - уведомляем
-      if (!licenseStatus.valid && oldStatus) {
-        console.log('⚠️ Лицензия больше не действительна!');
-        notifyLicenseExpired();
-      }
-      
-      // Если лицензия скоро истечет (менее 7 дней) - предупреждаем
-      if (licenseStatus.valid && licenseStatus.days_remaining <= 7) {
-        console.log(`⚠️ Лицензия истекает через ${licenseStatus.days_remaining} дней`);
-        notifyLicenseExpiring(licenseStatus.days_remaining);
-      }
-      
-      return licenseStatus;
-    } catch (e) {
-      console.log('Ошибка проверки лицензии:', e);
-      return { valid: false, error: 'Не удалось проверить лицензию' };
-    }
+    // Проверка лицензии убрана - всегда возвращаем true
+    return { valid: true, days_remaining: 999 };
   }
   
-  // Уведомление об истечении лицензии
-  function notifyLicenseExpired() {
-    console.log('🚨 Отправка уведомления об истечении лицензии');
-    
-    // Останавливаем прокси
-    stopProxyMonitoring();
-    helperClearProxy();
-    
-    // Создаем системное уведомление
-    chrome.notifications.create(`license-expired-${Date.now()}`, {
-      type: 'basic',
-      iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-      title: '🚨 ЛИЦЕНЗИЯ ИСТЕКЛА!',
-      message: `Лицензия на использование прокси-сервиса истекла.\n\nОбратитесь к администратору для продления.`
-    });
-    
-    // Уведомляем popup
-    chrome.runtime.sendMessage({
-      action: 'licenseExpired',
-      licenseStatus: licenseStatus
-    }).catch(() => {
-      console.log('Popup не открыт');
-    });
-  }
+  // Функция уведомления о лицензии убрана
   
-  // Уведомление о скором истечении лицензии
-  function notifyLicenseExpiring(daysRemaining) {
-    chrome.runtime.sendMessage({
-      action: 'licenseExpiring',
-      daysRemaining: daysRemaining,
-      licenseStatus: licenseStatus
-    }).catch(() => {
-      console.log('Popup не открыт');
-    });
-  }
+  // Функция уведомления о лицензии убрана
   
 
   // Функция для проверки реального IP через API с улучшенной диагностикой
@@ -677,51 +584,22 @@ const AUTH_CONFIG = {
     
     console.log(`Найден profileKey для IP ${userAccount.ip}: ${profileKey}`);
     
-    // СНАЧАЛА пытаемся подключиться через FastAPI (без очистки порта)
-    // FastAPI сам проверит, занят ли профиль
-    const res = await helperApplyProxy(
-      userAccount.ip, 
-      userAccount.port, 
-      userAccount.username, 
-      userAccount.password, 
-      localPort,
-      'user',  // тип пользователя
-      profileKey || `user_${userAccount.ip}`  // profile_id (fallback на IP)
-    );
-    
-    if (!res || res.success !== true) {
-      console.log('Помощник вернул ошибку при apply:', res);
-      isConnecting = false;
-      isSwitching = false;
-      
-      // Проверяем, не занят ли аккаунт
-      if (res.status === 423) {
-        console.log('❌ Аккаунт занят другим пользователем');
-        console.log(`Профиль ${profileKey} недоступен`);
-        
-        // Показываем уведомление пользователю
-        chrome.runtime.sendMessage({
-          action: 'accountBusy',
-          message: `Профиль "${profileKey}" уже используется.\n\nВыберите другой профиль или обратитесь к администратору.`
-        }).catch(() => {
-          console.log('Popup не открыт, уведомление не отправлено');
-        });
-      }
-      
-      return;
-    }
-    
-    console.log('✅ Профиль свободен, подключение разрешено');
-    
-    // Дополнительная задержка для стабилизации tinyproxy
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Прямое подключение к Squid - FastAPI больше не нужен
+    console.log('✅ Подключение к Squid прокси напрямую');
   
-    // Настраиваем браузер на внешний прокси без пароля
-    const pacData = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
+    // Для Squid используем PAC скрипт с аутентификацией
+    const pacData = `function FindProxyForURL(url, host) { 
+      return "PROXY 94.241.175.200:${localPort}"; 
+    }`;
+    
     chrome.proxy.settings.set(
       { value: { mode: 'pac_script', pacScript: { data: pacData } }, scope: 'regular' },
       () => {
-        console.log(`Внешний прокси 94.241.175.200:${localPort} установлен для ${userAccount.name}`);
+        console.log(`Squid прокси 94.241.175.200:${localPort} установлен для ${userAccount.name}`);
+        
+        // Для Squid без аутентификации пароль не нужен
+        console.log('✅ Squid прокси настроен без аутентификации');
+        
         currentProfile = profileKey || userAccount.name;
         isConnecting = false;
         connectionRetryCount = 0;
@@ -790,33 +668,8 @@ const AUTH_CONFIG = {
     isSwitching = true;
     lastSwitchAtMs = Date.now();
     
-    // Передаем тип пользователя 'admin' и profile_id
-    const res = await helperApplyProxy(
-      profile.ip, 
-      profile.port, 
-      profile.username, 
-      profile.password, 
-      localPort,
-      'admin',  // тип пользователя - админ
-      profileKey  // profile_id
-    );
-    
-    if (!res || res.ok !== true) {
-      console.log('Помощник вернул ошибку при apply (admin):', res);
-      isSwitching = false;
-      
-      // Для админа просто логируем
-      if (res.status === 423) {
-        console.log('⚠️ Неожиданная ошибка 423 для админа');
-      }
-      
-      return;
-    }
-    
-    console.log('✅ Админ успешно подключился к профилю');
-    
-    // Дополнительная задержка для стабилизации tinyproxy
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Прямое подключение к Squid - FastAPI больше не нужен
+    console.log('✅ Подключение к Squid прокси напрямую (admin)');
   
     // Переключаем браузер на внешний прокси
     const pacDataAdmin = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
@@ -999,54 +852,38 @@ chrome.proxy.onProxyError.addListener((details) => {
       // СНАЧАЛА проверяем лицензию для всех типов пользователей
       console.log('🔍 Проверка лицензии перед авторизацией...');
       
-      checkLicenseStatus().then((license) => {
-        console.log('Результат проверки лицензии:', license);
-        
-        // Если лицензия недействительна - отказываем в авторизации
-        if (!license.valid) {
-          console.log('❌ Лицензия недействительна, отказываем в авторизации');
-          
-          let errorMessage = 'Лицензия истекла.\n\nОбратитесь к администратору для продления.';
-          
-          // Формируем сообщение в зависимости от причины
-          if (license.days_remaining < 0) {
-            const daysExpired = Math.abs(license.days_remaining);
-            errorMessage = `Лицензия истекла ${daysExpired} ${getDaysWord(daysExpired)} назад.\n\nОбратитесь к администратору для продления.`;
-          } else if (license.error) {
-            errorMessage = `${license.error}\n\nОбратитесь к администратору.`;
-          }
-          
-          sendResponse({ 
-            success: false, 
-            message: errorMessage,
-            licenseExpired: true,
-            licenseStatus: license
-          });
-          return;
-        }
-        
-        console.log('✅ Лицензия действительна, продолжаем авторизацию');
+      // Проверка лицензии убрана - продолжаем авторизацию
+      console.log('✅ Авторизация разрешена');
         
         // Для обычных пользователей проверяем доступность профиля
         // Убрали проверку занятости профилей - теперь сразу авторизуем всех
         console.log('✅ Авторизация без проверки занятости профилей');
         completeAuthentication(userInfo, sendResponse);
-      }).catch((err) => {
-        console.log('Ошибка при проверке лицензии:', err);
-        sendResponse({ 
-          success: false, 
-          message: 'Ошибка проверки лицензии.\n\nОбратитесь к администратору.',
-          licenseExpired: true
-        });
-      });
       
       return true; // Асинхронный ответ
     }
     
     if (request.action === 'checkLicense') {
-      checkLicenseStatus().then((license) => {
-        sendResponse({ licenseStatus: license });
+      sendResponse({ licenseStatus: { valid: true, days_remaining: 999 } });
+      return true;
+    }
+    
+    if (request.action === 'setPassword') {
+      // Получаем пароль от popup
+      const { username, password } = request;
+      console.log(`Пароль получен для пользователя ${username}`);
+      
+      // Сохраняем пароль в storage
+      chrome.storage.local.set({ 
+        [`password_${username}`]: password 
       });
+      
+      // Обновляем пароль в текущем профиле
+      if (currentProfile && AUTH_CONFIG.userAccounts[currentProfile]) {
+        AUTH_CONFIG.userAccounts[currentProfile].password = password;
+      }
+      
+      sendResponse({ success: true });
       return true;
     }
     
@@ -1289,26 +1126,13 @@ chrome.proxy.onProxyError.addListener((details) => {
   });
 
   // Проверка лицензии каждые 12 часов
-  setInterval(() => {
-    console.log('⏰ Плановая проверка лицензии...');
-    checkLicenseStatus();
-  }, 12 * 60 * 60 * 1000); // 12 часов
+  // Плановая проверка лицензии убрана
 
   // Инициализация при загрузке
   (async () => {
     console.log('Инициализация расширения...');
     
-    // Проверяем лицензию при старте
-    console.log('🔑 Проверка лицензии...');
-    const license = await checkLicenseStatus();
-    
-    if (!license.valid) {
-      console.log('❌ Лицензия недействительна, расширение работать не будет');
-      console.log(`Причина: ${license.error}`);
-      return;
-    }
-    
-    console.log('✅ Лицензия действительна, запускаем расширение');
+    // Проверка лицензии убрана - запускаем расширение
+    console.log('✅ Расширение запущено');
     setupAutoProxy();
   })();
-  

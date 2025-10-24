@@ -6,6 +6,8 @@ import shutil
 import hashlib
 import hmac
 import logging
+import time
+import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -209,21 +211,18 @@ def write_config(payload: ApplyPayload) -> None:
     cfg_path = BASE_DIR / f"tinyproxy_{payload.listen_port}.cfg"
     pid_path = BASE_DIR / f"tinyproxy_{payload.listen_port}.pid"
     
-    cfg = f"""User tinyproxy
-Group tinyproxy
-Port {payload.listen_port}
+    # Минимальная рабочая конфигурация tinyproxy
+    cfg = f"""Port {payload.listen_port}
 Listen 0.0.0.0
-Timeout 600
-DefaultErrorFile "/usr/share/tinyproxy/default.html"
+Timeout 30
+DefaultErrorFile "/usr/share/ /default.html"
 Logfile "{BASE_DIR}/tinyproxy_{payload.listen_port}.log"
-LogLevel Info
+LogLevel Connect
 PidFile "{pid_path}"
-MaxClients 100
-MinSpareServers 5
-MaxSpareServers 20
-StartServers 10
-MaxRequestsPerChild 0
+MaxClients 50
 ViaProxyName "tinyproxy"
+Allow 127.0.0.1
+Allow 0.0.0.0/0
 Upstream http {payload.username}:{payload.password}@{payload.ip}:{payload.port}
 """
     cfg_path.write_text(cfg)
@@ -259,24 +258,90 @@ def stop_tinyproxy_on_port(port: int) -> None:
                 pass
 
 
-def start_tinyproxy_on_port(payload: ApplyPayload) -> None:
-    """Запускает tinyproxy на конкретном порту"""
+def check_proxy_health(port: int, target_ip: str, target_port: int, username: str, password: str) -> bool:
+    """Проверяет здоровье прокси-соединения"""
+    import requests
+    import time
+    
+    try:
+        # Ждем немного, чтобы tinyproxy запустился
+        time.sleep(3)
+        
+        # Сначала проверяем, что tinyproxy запущен
+        if port not in active_processes:
+            logger.error(f"❌ Tinyproxy не запущен на порту {port}")
+            return False
+            
+        proc = active_processes[port]
+        if proc.poll() is not None:
+            logger.error(f"❌ Tinyproxy процесс завершился на порту {port}")
+            return False
+        
+        # Тестируем подключение через локальный tinyproxy
+        proxies = {
+            'http': f'http://localhost:{port}',
+            'https': f'http://localhost:{port}'
+        }
+        
+        # Быстрый тест подключения через tinyproxy
+        response = requests.get(
+            'http://httpbin.org/ip', 
+            proxies=proxies, 
+            timeout=15,
+            headers={'User-Agent': 'TinyProxy-Health-Check/1.0'}
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"✅ Tinyproxy здоров на порту {port}")
+            return True
+        else:
+            logger.warning(f"⚠️ Tinyproxy отвечает с кодом {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Tinyproxy нездоров на порту {port}: {e}")
+        return False
+
+
+def start_tinyproxy_on_port(payload: ApplyPayload) -> bool:
+    """Запускает tinyproxy на конкретном порту с проверкой здоровья"""
     # Сначала останавливаем существующий процесс на этом порту
     stop_tinyproxy_on_port(payload.listen_port)
     
-    # Создаем конфиг
-    cfg_path, pid_path = write_config(payload)
-    
-    # Запускаем новый процесс
-    proc = subprocess.Popen(
-        ["tinyproxy", "-c", str(cfg_path)], 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL
-    )
-    
-    # Сохраняем процесс в словаре
-    active_processes[payload.listen_port] = proc
-    pid_path.write_text(str(proc.pid))
+    try:
+        # Создаем конфиг
+        cfg_path, pid_path = write_config(payload)
+        
+        # Запускаем новый процесс
+        proc = subprocess.Popen(
+            ["tinyproxy", "-c", str(cfg_path)], 
+            stdout=subprocess.DEVNULL, 
+            stderr=subprocess.DEVNULL
+        )
+        
+        # Ждем запуска процесса
+        time.sleep(1)
+        
+        # Проверяем, что процесс запустился
+        if proc.poll() is not None:
+            logger.error(f"❌ Tinyproxy не запустился на порту {payload.listen_port}")
+            return False
+        
+        # Сохраняем процесс в словаре
+        active_processes[payload.listen_port] = proc
+        pid_path.write_text(str(proc.pid))
+        
+        # Проверяем здоровье прокси
+        if check_proxy_health(payload.listen_port, payload.ip, payload.port, payload.username, payload.password):
+            logger.info(f"✅ Tinyproxy успешно запущен и проверен на порту {payload.listen_port}")
+            return True
+        else:
+            logger.warning(f"⚠️ Tinyproxy запущен, но прокси нездоров на порту {payload.listen_port}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка запуска tinyproxy на порту {payload.listen_port}: {e}")
+        return False
 
 
 @APP.post("/apply")
@@ -296,22 +361,30 @@ def apply_proxy(payload: ApplyPayload):
     logger.info(f"   IP назначения: {payload.ip}")
     logger.info(f"   Локальный порт: {payload.listen_port}")
     
-    # Убираем проверку занятости профилей - теперь любой может подключиться
+    # Запускаем tinyproxy на конкретном порту с проверкой здоровья
+    success = start_tinyproxy_on_port(payload)
     
-    # Запускаем tinyproxy на конкретном порту
-    start_tinyproxy_on_port(payload)
-    
-    # Убрали регистрацию активных сеансов
-    
-    logger.info(f"✅ УСПЕШНО ПОДКЛЮЧЕНО")
-    logger.info(f"   Профиль: {profile_id}")
-    logger.info(f"   Тип пользователя: {payload.user_type}")
-    logger.info(f"   IP назначения: {payload.ip}")
-    logger.info(f"   Локальный порт: {payload.listen_port}")
-    logger.info(f"   Время подключения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info("=" * 80)
-    
-    return {"ok": True, "listen": payload.listen_port, "profile_id": profile_id}
+    if success:
+        logger.info(f"✅ УСПЕШНО ПОДКЛЮЧЕНО")
+        logger.info(f"   Профиль: {profile_id}")
+        logger.info(f"   Тип пользователя: {payload.user_type}")
+        logger.info(f"   IP назначения: {payload.ip}")
+        logger.info(f"   Локальный порт: {payload.listen_port}")
+        logger.info(f"   Время подключения: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 80)
+        
+        return {"ok": True, "listen": payload.listen_port, "profile_id": profile_id}
+    else:
+        logger.error(f"❌ ОШИБКА ПОДКЛЮЧЕНИЯ")
+        logger.error(f"   Профиль: {profile_id}")
+        logger.error(f"   IP назначения: {payload.ip}")
+        logger.error(f"   Локальный порт: {payload.listen_port}")
+        logger.error("=" * 80)
+        
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ошибка запуска прокси для {profile_id}. Проверьте логи для деталей."
+        )
 
 
 @APP.post("/clear")
@@ -363,6 +436,85 @@ def get_active_sessions():
 @APP.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@APP.get("/health/{port}")
+def check_proxy_health_endpoint(port: int):
+    """Проверяет здоровье конкретного прокси"""
+    if port not in active_processes:
+        return {"healthy": False, "error": "Прокси не активен"}
+    
+    try:
+        # Проверяем, что процесс еще работает
+        proc = active_processes[port]
+        if proc.poll() is not None:
+            return {"healthy": False, "error": "Процесс tinyproxy завершился"}
+        
+        # Читаем конфиг для получения данных о прокси
+        cfg_path = BASE_DIR / f"tinyproxy_{port}.cfg"
+        if not cfg_path.exists():
+            return {"healthy": False, "error": "Конфиг не найден"}
+        
+        # Парсим конфиг для получения upstream данных
+        config_content = cfg_path.read_text()
+        upstream_line = [line for line in config_content.split('\n') if line.startswith('Upstream')]
+        
+        if not upstream_line:
+            return {"healthy": False, "error": "Upstream не настроен"}
+        
+        # Извлекаем данные из upstream
+        upstream = upstream_line[0].split()[-1]  # http user:pass@ip:port
+        upstream_parts = upstream.split('@')
+        if len(upstream_parts) != 2:
+            return {"healthy": False, "error": "Неверный формат upstream"}
+        
+        auth_part = upstream_parts[0].split('//')[-1]  # user:pass
+        target_part = upstream_parts[1]  # ip:port
+        
+        username, password = auth_part.split(':')
+        target_ip, target_port = target_part.split(':')
+        target_port = int(target_port)
+        
+        # Проверяем здоровье
+        is_healthy = check_proxy_health(port, target_ip, target_port, username, password)
+        
+        return {
+            "healthy": is_healthy,
+            "port": port,
+            "target": f"{target_ip}:{target_port}",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка проверки здоровья прокси {port}: {e}")
+        return {"healthy": False, "error": str(e)}
+
+
+@APP.get("/status/all")
+def get_all_proxy_status():
+    """Возвращает статус всех активных прокси"""
+    status = {}
+    
+    for port, proc in active_processes.items():
+        try:
+            is_running = proc.poll() is None
+            status[port] = {
+                "running": is_running,
+                "pid": proc.pid if is_running else None,
+                "port": port
+            }
+        except Exception as e:
+            status[port] = {
+                "running": False,
+                "error": str(e),
+                "port": port
+            }
+    
+    return {
+        "active_proxies": len(active_processes),
+        "proxies": status,
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 # ==================== ENDPOINTS ДЛЯ УПРАВЛЕНИЯ ЛИЦЕНЗИЯМИ ====================

@@ -3,6 +3,9 @@
   "name": "Auto Proxy Connector",
   "version": "1.0.0",
   "description": "Автоматическое подключение прокси при запуске браузера",
+  "icons": {
+    "16": "icons/icon.svg"
+  },
   "permissions": [
     "proxy",
     "storage",
@@ -26,7 +29,8 @@
     }
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "Auto Proxy Connector"
   }
 }
 

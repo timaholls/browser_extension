@@ -447,31 +447,7 @@ startStatusMonitoring();
 
 // Слушаем уведомления от background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'accountBusy') {
-    console.log('❌ Получено уведомление: профиль занят');
-    
-    // Показываем уведомление об ошибке
-    const errorMessage = request.message || 'Профиль уже используется другим пользователем.\n\nВыберите другой профиль или обратитесь к администратору.';
-    showErrorNotification(errorMessage);
-    
-    // Показываем сообщение в интерфейсе
-    showMessage('⚠️ Профиль занят! Выберите другой профиль или обратитесь к администратору.', 'error');
-    
-    // Отключаем статус подключения
-    updateProxyStatus({
-      connected: false,
-      realIP: null,
-      expectedIP: null,
-      lastCheck: Date.now()
-    });
-    
-    // Обновляем UI
-    chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (data) => {
-      if (data) {
-        updateUI(data);
-      }
-    });
-  } else if (request.action === 'proxyStatusChanged') {
+  if (request.action === 'proxyStatusChanged') {
     console.log('Получено уведомление об изменении статуса прокси:', request.proxyStatus);
     updateProxyStatus(request.proxyStatus);
   } else if (request.action === 'proxyConnected') {
@@ -626,16 +602,6 @@ if (btnLogin) {
           
           // Показываем сообщение в интерфейсе
           showMessage('⚠️ Лицензия истекла! Обратитесь к администратору.', 'error');
-        }
-        // Проверяем, не занят ли профиль
-        else if (response && response.profileBusy) {
-          console.log('❌ Профиль занят, показываем уведомление');
-          
-          // Показываем красивое модальное окно
-          showErrorNotification(response.message || 'Профиль уже используется другим пользователем.\n\nВыберите другой профиль или обратитесь к администратору.');
-          
-          // Показываем сообщение в интерфейсе
-          showMessage('⚠️ Профиль занят! Выберите другой профиль.', 'error');
         } else {
           // Обычная ошибка авторизации (неверный пароль)
           showMessage(response ? response.message : 'Ошибка авторизации', 'error');

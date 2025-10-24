@@ -83,8 +83,7 @@ SECRET_KEY = "apc_proxy_connector_secret_2025"
 # Словарь для отслеживания активных tinyproxy процессов по портам
 active_processes: Dict[int, subprocess.Popen] = {}
 
-# Словарь для отслеживания активных сеансов: {profile_id: {"user_type": "user", "port": 3128}}
-active_sessions: Dict[str, Dict[str, Any]] = {}
+# Убрали отслеживание активных сеансов
 
 # Состояние лицензии
 license_status = {
@@ -297,39 +296,12 @@ def apply_proxy(payload: ApplyPayload):
     logger.info(f"   IP назначения: {payload.ip}")
     logger.info(f"   Локальный порт: {payload.listen_port}")
     
-    # Проверяем, не занят ли профиль
-    if profile_id in active_sessions:
-        existing_session = active_sessions[profile_id]
-        
-        # Если текущий пользователь не админ и профиль занят - ОТКАЗЫВАЕМ БЕЗ ЗАПУСКА tinyproxy
-        if payload.user_type != "admin":
-            logger.warning(f"❌ ОТКАЗАНО В ПОДКЛЮЧЕНИИ")
-            logger.warning(f"   Профиль: {profile_id} ({payload.ip})")
-            logger.warning(f"   Причина: профиль уже занят")
-            logger.warning(f"   Текущий пользователь: {existing_session['user_type']}")
-            logger.warning(f"   Попытка подключения: {payload.user_type}")
-            logger.warning("=" * 80)
-            raise HTTPException(
-                status_code=423,  # 423 Locked
-                detail=f"Профиль {profile_id} уже используется. Выберите другой профиль или обратитесь к администратору."
-            )
-        
-        # Если админ - разрешаем подключение с приоритетом
-        logger.warning(f"⚡ ПРИОРИТЕТНЫЙ ДОСТУП АДМИНА")
-        logger.warning(f"   Профиль: {profile_id} ({payload.ip})")
-        logger.warning(f"   Вытесняет: {existing_session['user_type']}")
-        logger.warning(f"   Был подключен с: {existing_session.get('connected_at', 'неизвестно')}")
+    # Убираем проверку занятости профилей - теперь любой может подключиться
     
     # Запускаем tinyproxy на конкретном порту
     start_tinyproxy_on_port(payload)
     
-    # Регистрируем активный сеанс
-    active_sessions[profile_id] = {
-        "user_type": payload.user_type,
-        "port": payload.listen_port,
-        "ip": payload.ip,
-        "connected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+    # Убрали регистрацию активных сеансов
     
     logger.info(f"✅ УСПЕШНО ПОДКЛЮЧЕНО")
     logger.info(f"   Профиль: {profile_id}")
@@ -344,19 +316,13 @@ def apply_proxy(payload: ApplyPayload):
 
 @APP.post("/clear")
 def clear_proxy():
-    logger.info(f"🧹 Очистка всех сеансов | Активных сеансов: {len(active_sessions)}")
-    
-    # Логируем какие сеансы будут очищены
-    for profile_id, session in active_sessions.items():
-        logger.info(f"   Очищается | Профиль: {profile_id} | Тип: {session['user_type']} | IP: {session['ip']}")
+    logger.info(f"🧹 Очистка всех процессов | Активных процессов: {len(active_processes)}")
     
     # Останавливаем все активные процессы
     for port in list(active_processes.keys()):
         stop_tinyproxy_on_port(port)
     
-    # Очищаем все сеансы
-    active_sessions.clear()
-    logger.info("✅ Все сеансы очищены")
+    logger.info("✅ Все процессы очищены")
     return {"ok": True}
 
 
@@ -367,13 +333,6 @@ def clear_proxy_on_port(port: int):
     # Останавливаем tinyproxy на конкретном порту
     stop_tinyproxy_on_port(port)
     
-    # Освобождаем сеансы, связанные с этим портом
-    profiles_to_remove = [profile_id for profile_id, session in active_sessions.items() if session["port"] == port]
-    for profile_id in profiles_to_remove:
-        session = active_sessions[profile_id]
-        logger.info(f"   Освобожден | Профиль: {profile_id} | Тип: {session['user_type']} | IP: {session['ip']}")
-        del active_sessions[profile_id]
-    
     logger.info(f"✅ Порт {port} очищен")
     return {"ok": True, "port": port}
 
@@ -381,69 +340,24 @@ def clear_proxy_on_port(port: int):
 @APP.post("/release/{profile_id}")
 def release_profile(profile_id: str):
     """Освобождает профиль при выходе пользователя"""
-    if profile_id in active_sessions:
-        session = active_sessions[profile_id]
-        port = session["port"]
-        user_type = session["user_type"]
-        
-        logger.info("=" * 80)
-        logger.info(f"🚪 ВЫХОД ПОЛЬЗОВАТЕЛЯ")
-        logger.info(f"   Профиль: {profile_id}")
-        logger.info(f"   Тип: {user_type}")
-        logger.info(f"   IP: {session['ip']}")
-        logger.info(f"   Порт: {port}")
-        logger.info(f"   Был подключен с: {session.get('connected_at', 'неизвестно')}")
-        
-        # Останавливаем tinyproxy для этого профиля
-        stop_tinyproxy_on_port(port)
-        
-        # Удаляем сеанс
-        del active_sessions[profile_id]
-        logger.info(f"✅ Профиль освобожден")
-        logger.info("=" * 80)
-        
-        return {"ok": True, "profile_id": profile_id, "port": port}
-    else:
-        logger.warning(f"⚠️ Попытка освободить несуществующий профиль: {profile_id}")
-        return {"ok": True, "message": f"Профиль {profile_id} уже был освобожден"}
+    logger.info("=" * 80)
+    logger.info(f"🚪 ВЫХОД ПОЛЬЗОВАТЕЛЯ")
+    logger.info(f"   Профиль: {profile_id}")
+    logger.info("=" * 80)
+    
+    return {"ok": True, "profile_id": profile_id}
 
 
 @APP.get("/sessions")
 def get_active_sessions():
-    """Возвращает список активных сеансов"""
-    logger.info(f"📊 Запрос списка активных сеансов | Всего: {len(active_sessions)}")
-    for profile_id, session in active_sessions.items():
-        logger.info(f"   - {profile_id}: {session['user_type']} ({session['ip']})")
-    return {"sessions": active_sessions}
+    """Возвращает список активных процессов"""
+    logger.info(f"📊 Запрос списка активных процессов | Всего: {len(active_processes)}")
+    return {"processes": list(active_processes.keys())}
 
 
-@APP.get("/check/{profile_id}")
-def check_profile_availability(profile_id: str):
-    """Проверяет доступность профиля для подключения"""
-    logger.info(f"🔍 Проверка доступности профиля")
-    logger.info(f"   Профиль: {profile_id}")
-    
-    is_busy = profile_id in active_sessions
-    
-    if is_busy:
-        session = active_sessions[profile_id]
-        logger.info(f"   Результат: ❌ ЗАНЯТ")
-        logger.info(f"   Занят пользователем: {session['user_type']}")
-        logger.info(f"   IP: {session['ip']}")
-        logger.info(f"   Подключен с: {session.get('connected_at', 'неизвестно')}")
-        return {
-            "available": False,
-            "busy": True,
-            "occupied_by": session["user_type"],
-            "profile_id": profile_id
-        }
-    
-    logger.info(f"   Результат: ✅ ДОСТУПЕН")
-    return {
-        "available": True,
-        "busy": False,
-        "profile_id": profile_id
-    }
+# Убрали endpoint проверки занятости профилей
+
+# Убрали endpoint'ы проверки прокси
 
 
 @APP.get("/health")

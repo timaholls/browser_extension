@@ -142,28 +142,7 @@ const AUTH_CONFIG = {
     }
   }
   
-  // Функция для проверки доступности профиля
-  async function helperCheckProfile(profileId) {
-    try {
-      const response = await fetch(`http://94.241.175.200:8765/check/${profileId}`, {
-        method: 'GET'
-      });
-      
-      // Проверяем лицензию
-      if (response.status === 402) {
-        const errorData = await response.json();
-        console.log('❌ Лицензия недействительна:', errorData);
-        licenseStatus = errorData.license_status || { valid: false, error: errorData.detail };
-        notifyLicenseExpired();
-        return { available: false, error: true, licenseError: true };
-      }
-      
-      return await response.json();
-    } catch (e) {
-      console.log('Не удалось проверить профиль:', e);
-      return { available: false, error: true };
-    }
-  }
+  // Убрали функцию проверки занятости профилей
   
   // Функция для проверки статуса лицензии
   async function checkLicenseStatus() {
@@ -243,9 +222,6 @@ const AUTH_CONFIG = {
     // Список API для проверки IP (fallback)
     const apis = [
       'https://api.ipify.org?format=json',
-      'https://ipapi.co/json/',
-      'https://httpbin.org/ip',
-      'https://api.my-ip.io/ip.json'
     ];
     
     for (let i = 0; i < apis.length; i++) {
@@ -1018,43 +994,8 @@ chrome.proxy.onProxyError.addListener((details) => {
         console.log('✅ Лицензия действительна, продолжаем авторизацию');
         
         // Для обычных пользователей проверяем доступность профиля
-        if (userInfo.type === 'user') {
-        // Ищем profileKey по IP адресу
-        const profileKey = Object.keys(AUTH_CONFIG.userAccounts).find(
-          key => AUTH_CONFIG.userAccounts[key].ip === userInfo.user.ip
-        );
-        
-        console.log(`🔍 Проверка доступности профиля ${profileKey} при авторизации...`);
-        
-        // Проверяем доступность профиля
-        helperCheckProfile(profileKey).then((checkResult) => {
-          console.log('Результат проверки профиля:', checkResult);
-          
-          if (!checkResult.available && !checkResult.error) {
-            // Профиль занят
-            console.log(`❌ Профиль ${profileKey} занят пользователем типа ${checkResult.occupied_by}`);
-            sendResponse({ 
-              success: false, 
-              message: `Профиль "${profileKey}" уже используется.\n\nВыберите другой профиль или обратитесь к администратору.`,
-              profileBusy: true
-            });
-            return;
-          }
-          
-          // Профиль свободен или произошла ошибка проверки - разрешаем вход
-          console.log(`✅ Профиль ${profileKey} доступен`);
-          completeAuthentication(userInfo, sendResponse);
-        }).catch((err) => {
-          console.log('Ошибка при проверке профиля:', err);
-          // При ошибке проверки разрешаем вход
-          completeAuthentication(userInfo, sendResponse);
-        });
-        
-          return true; // Асинхронный ответ
-        }
-        
-        // Для админов проверяем только занятость (без проверки профиля)
-        console.log('🔑 Админ входит без проверки занятости');
+        // Убрали проверку занятости профилей - теперь сразу авторизуем всех
+        console.log('✅ Авторизация без проверки занятости профилей');
         completeAuthentication(userInfo, sendResponse);
       }).catch((err) => {
         console.log('Ошибка при проверке лицензии:', err);

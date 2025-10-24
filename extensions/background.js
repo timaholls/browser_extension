@@ -106,26 +106,21 @@ const AUTH_CONFIG = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          ip, 
-          port, 
-          username, 
-          password, 
-          listen_port: listenPort,
-          user_type: userType,
-          profile_id: profileId
+          profile_id: profileId,
+          user_type: userType
         })
       });
       
       // Проверяем статус ответа
       if (!response.ok) {
         const errorData = await response.json();
-        return { ok: false, status: response.status, error: errorData.detail || 'Ошибка подключения' };
+        return { success: false, status: response.status, error: errorData.detail || 'Ошибка подключения' };
       }
       
       return await response.json();
     } catch (e) {
       console.log('Не удалось обратиться к помощнику FastAPI:', e);
-      return { ok: false, error: 'Не удалось подключиться к серверу' };
+      return { success: false, error: 'Не удалось подключиться к серверу' };
     }
   }
   
@@ -217,23 +212,36 @@ const AUTH_CONFIG = {
     });
   }
   
-  // Функция для проверки реального IP через API
+
+  // Функция для проверки реального IP через API с улучшенной диагностикой
   async function checkRealIP() {
-    // Список API для проверки IP (fallback)
+    // Список API для проверки IP - только один источник
     const apis = [
-      'https://api.ipify.org?format=json',
+      'https://api.ipify.org?format=json'
     ];
     
     for (let i = 0; i < apis.length; i++) {
       try {
         console.log(`🌐 Запрос к API ${i + 1}/${apis.length}: ${apis[i]}`);
+        
+        // Создаем AbortController для таймаута
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 секунд таймаут
+        
         const response = await fetch(apis[i], {
           method: 'GET',
-          timeout: 5000
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
         });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
           console.log(`API ${i + 1} вернул ошибку: ${response.status} ${response.statusText}`);
+          console.log(`   Заголовки ответа:`, [...response.headers.entries()]);
           continue;
         }
         
@@ -246,23 +254,49 @@ const AUTH_CONFIG = {
           ip = data.ip;
         } else if (data.origin) {
           ip = data.origin;
+        } else if (data.query) {
+          ip = data.query;
         } else if (typeof data === 'string') {
           ip = data.trim();
         }
         
-        if (ip) {
-          console.log(`Реальный IP адрес: ${ip}`);
+        if (ip && ip !== '127.0.0.1' && ip !== 'localhost') {
+          console.log(`✅ Реальный IP адрес получен: ${ip}`);
           return ip;
         } else {
-          console.log(`API ${i + 1}: IP не найден в ответе`);
+          console.log(`API ${i + 1}: IP не найден или невалиден в ответе`);
         }
       } catch (e) {
-        console.log(`API ${i + 1} ошибка:`, e.message);
+        console.log(`❌ API ${i + 1} ошибка:`, e.name, e.message);
+        
+        // Детальная диагностика ошибок
+        if (e.name === 'AbortError') {
+          console.log(`   Причина: Таймаут запроса (превышено 8 секунд)`);
+        } else if (e.name === 'TypeError' && e.message.includes('fetch')) {
+          console.log(`   Причина: Ошибка сети или CORS`);
+          console.log(`   Детали: ${e.message}`);
+        } else if (e.name === 'SyntaxError') {
+          console.log(`   Причина: Ошибка парсинга JSON`);
+          console.log(`   Детали: ${e.message}`);
+        } else {
+          console.log(`   Причина: Неизвестная ошибка`);
+          console.log(`   Детали: ${e.stack || e.message}`);
+        }
+        
         continue;
       }
     }
     
-    console.log('Все API недоступны, не удалось получить реальный IP');
+    console.log('❌ Все API недоступны, не удалось получить реальный IP');
+    console.log('🔍 Возможные причины:');
+    console.log('   1. Отсутствует подключение к интернету');
+    console.log('   2. Блокировка запросов антивирусом/файрволом');
+    console.log('   3. Проблемы с DNS');
+    console.log('   4. Блокировка CORS в браузере');
+    console.log('   5. Все API сервисы временно недоступны');
+    
+    // Убираем все диагностики - только простое сообщение об ошибке
+    
     return null;
   }
   
@@ -655,7 +689,7 @@ const AUTH_CONFIG = {
       profileKey || `user_${userAccount.ip}`  // profile_id (fallback на IP)
     );
     
-    if (!res || res.ok !== true) {
+    if (!res || res.success !== true) {
       console.log('Помощник вернул ошибку при apply:', res);
       isConnecting = false;
       isSwitching = false;
@@ -682,12 +716,12 @@ const AUTH_CONFIG = {
     // Дополнительная задержка для стабилизации tinyproxy
     await new Promise(resolve => setTimeout(resolve, 3000));
   
-    // Настраиваем браузер на локальный прокси без пароля
+    // Настраиваем браузер на внешний прокси без пароля
     const pacData = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
     chrome.proxy.settings.set(
       { value: { mode: 'pac_script', pacScript: { data: pacData } }, scope: 'regular' },
       () => {
-        console.log(`Локальный прокси 94.241.175.200:${localPort} установлен для ${userAccount.name}`);
+        console.log(`Внешний прокси 94.241.175.200:${localPort} установлен для ${userAccount.name}`);
         currentProfile = profileKey || userAccount.name;
         isConnecting = false;
         connectionRetryCount = 0;
@@ -784,12 +818,12 @@ const AUTH_CONFIG = {
     // Дополнительная задержка для стабилизации tinyproxy
     await new Promise(resolve => setTimeout(resolve, 3000));
   
-    // Переключаем браузер на локальный прокси
+    // Переключаем браузер на внешний прокси
     const pacDataAdmin = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
     chrome.proxy.settings.set(
       { value: { mode: 'pac_script', pacScript: { data: pacDataAdmin } }, scope: 'regular' },
       () => {
-        console.log(`Локальный прокси 94.241.175.200:${localPort} установлен для ${profile.name}`);
+        console.log(`Внешний прокси 94.241.175.200:${localPort} установлен для ${profile.name}`);
         currentProfile = profileKey;
         
         // НЕ показываем "Подключен" пока не проверим IP

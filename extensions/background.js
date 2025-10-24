@@ -102,7 +102,7 @@ const AUTH_CONFIG = {
   // Вспомогательные функции для общения с локальным помощником FastAPI
   async function helperApplyProxy(ip, port, username, password, listenPort = 3128, userType = 'user', profileId = '') {
     try {
-      const response = await fetch('http://127.0.0.1:8765/apply', {
+      const response = await fetch('http://94.241.175.200:8765/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -132,7 +132,7 @@ const AUTH_CONFIG = {
   // Функция для освобождения профиля
   async function helperReleaseProfile(profileId) {
     try {
-      const response = await fetch(`http://127.0.0.1:8765/release/${profileId}`, {
+      const response = await fetch(`http://94.241.175.200:8765/release/${profileId}`, {
         method: 'POST'
       });
       return await response.json();
@@ -145,7 +145,7 @@ const AUTH_CONFIG = {
   // Функция для проверки доступности профиля
   async function helperCheckProfile(profileId) {
     try {
-      const response = await fetch(`http://127.0.0.1:8765/check/${profileId}`, {
+      const response = await fetch(`http://94.241.175.200:8765/check/${profileId}`, {
         method: 'GET'
       });
       
@@ -168,7 +168,7 @@ const AUTH_CONFIG = {
   // Функция для проверки статуса лицензии
   async function checkLicenseStatus() {
     try {
-      const response = await fetch('http://127.0.0.1:8765/license/status', {
+      const response = await fetch('http://94.241.175.200:8765/license/status', {
         method: 'GET'
       });
       
@@ -536,10 +536,10 @@ const AUTH_CONFIG = {
     try {
       if (port) {
         // Очищаем конкретный порт
-        await fetch(`http://127.0.0.1:8765/clear/${port}`, { method: 'POST' });
+        await fetch(`http://94.241.175.200:8765/clear/${port}`, { method: 'POST' });
       } else {
         // Очищаем все порты
-        await fetch('http://127.0.0.1:8765/clear', { method: 'POST' });
+        await fetch('http://94.241.175.200:8765/clear', { method: 'POST' });
       }
     } catch (e) {
       console.log('Не удалось очистить прокси в помощнике:', e);
@@ -707,11 +707,11 @@ const AUTH_CONFIG = {
     await new Promise(resolve => setTimeout(resolve, 3000));
   
     // Настраиваем браузер на локальный прокси без пароля
-    const pacData = `function FindProxyForURL(url, host) { return "PROXY 127.0.0.1:${localPort}"; }`;
+    const pacData = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
     chrome.proxy.settings.set(
       { value: { mode: 'pac_script', pacScript: { data: pacData } }, scope: 'regular' },
       () => {
-        console.log(`Локальный прокси 127.0.0.1:${localPort} установлен для ${userAccount.name}`);
+        console.log(`Локальный прокси 94.241.175.200:${localPort} установлен для ${userAccount.name}`);
         currentProfile = profileKey || userAccount.name;
         isConnecting = false;
         connectionRetryCount = 0;
@@ -809,11 +809,11 @@ const AUTH_CONFIG = {
     await new Promise(resolve => setTimeout(resolve, 3000));
   
     // Переключаем браузер на локальный прокси
-    const pacDataAdmin = `function FindProxyForURL(url, host) { return "PROXY 127.0.0.1:${localPort}"; }`;
+    const pacDataAdmin = `function FindProxyForURL(url, host) { return "PROXY 94.241.175.200:${localPort}"; }`;
     chrome.proxy.settings.set(
       { value: { mode: 'pac_script', pacScript: { data: pacDataAdmin } }, scope: 'regular' },
       () => {
-        console.log(`Локальный прокси 127.0.0.1:${localPort} установлен для ${profile.name}`);
+        console.log(`Локальный прокси 94.241.175.200:${localPort} установлен для ${profile.name}`);
         currentProfile = profileKey;
         
         // НЕ показываем "Подключен" пока не проверим IP

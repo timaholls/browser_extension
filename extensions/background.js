@@ -13,13 +13,53 @@ const AUTH_CONFIG = {
     userAccounts: {
       'profile1': {
         name: 'profile1',
-        ip: '94.241.175.200',
+        ip: '45.139.125.123', // IP прокси для проверки
         port: 3128,
         username: 'user1',
         password: '', // Пользователь введет сам
         region: 'Россия',
         type: 'user',
         localPort: 3128
+      },
+      'profile2': {
+        name: 'profile2',
+        ip: '91.188.244.4', // IP прокси для проверки
+        port: 3129,
+        username: 'user2',
+        password: '', // Пользователь введет сам
+        region: 'Россия',
+        type: 'user',
+        localPort: 3129
+      },
+      'profile3': {
+        name: 'profile3',
+        ip: '185.181.245.211', // IP прокси для проверки
+        port: 3130,
+        username: 'user3',
+        password: '', // Пользователь введет сам
+        region: 'Россия',
+        type: 'user',
+        localPort: 3130
+      },
+      'profile4': {
+        name: 'profile4',
+        ip: '188.130.187.174', // IP прокси для проверки
+        port: 3131,
+        username: 'user4',
+        password: '', // Пользователь введет сам
+        region: 'Россия',
+        type: 'user',
+        localPort: 3131
+      },
+      'profile5': {
+        name: 'profile5',
+        ip: '45.140.53.190', // IP прокси для проверки
+        port: 3132,
+        username: 'user5',
+        password: '', // Пользователь введет сам
+        region: 'Россия',
+        type: 'user',
+        localPort: 3132
       }
     }
   };

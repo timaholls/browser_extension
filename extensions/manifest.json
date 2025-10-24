@@ -9,8 +9,9 @@
     "management",
     "identity",
     "tabs",
+    "notifications",
     "webRequest",
-    "notifications"
+    "webRequestAuthProvider"
   ],
   "host_permissions": [
     "<all_urls>"

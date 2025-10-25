@@ -7,8 +7,11 @@ let PROXY_CONFIG = null;
 // Загрузка конфигурации из JSON файла
 async function loadConfig() {
     try {
+        console.log('=== ЗАГРУЗКА КОНФИГУРАЦИИ ===');
         const response = await fetch(chrome.runtime.getURL('config.json'));
+        console.log('Ответ от config.json:', response);
         const config = await response.json();
+        console.log('Загруженная конфигурация:', config);
         
         // Преобразуем конфигурацию в нужный формат
         const firstProfileKey = Object.keys(config.profiles)[0];
@@ -211,6 +214,10 @@ let proxyStatus = {
 
 // Динамическая авторизация с выбором профиля по паролю
 function authenticateUser(password) {
+    console.log('=== ОТЛАДКА АВТОРИЗАЦИИ ===');
+    console.log('Введенный пароль:', password);
+    console.log('PROXY_CONFIG загружена:', !!PROXY_CONFIG);
+    
     if (!PROXY_CONFIG) {
         console.error('Конфигурация не загружена');
         return null;
@@ -861,9 +868,14 @@ chrome.proxy.onProxyError.addListener((details) => {
 // Сообщения от popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'authenticate') {
+        console.log('=== ОБРАБОТКА ЗАПРОСА АВТОРИЗАЦИИ ===');
+        console.log('Запрос:', request);
+        
         const userInfo = authenticateUser(request.password);
+        console.log('Результат авторизации:', userInfo);
 
         if (!userInfo) {
+            console.log('Авторизация не удалась - отправляем ошибку');
             sendResponse({success: false, message: 'Неверный пароль'});
             return true;
         }

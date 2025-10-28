@@ -27,12 +27,13 @@ const btnAdminSave = null; // удалено из UI
 const btnAdminEnable = null;
 const btnAdminDisable = null;
 const btnAdminLogout = document.getElementById('btnAdminLogout');
+const btnAdminUnblock = document.getElementById('btnAdminUnblock');
 
 // Отладочная информация
-console.log('Элементы DOM загружены:');
-console.log('adminProfileSelect:', adminProfileSelect);
-console.log('adminStatusText:', adminStatusText);
-console.log('adminProxyHost:', adminProxyHost);
+// console.log removed
+// console.log removed
+// console.log removed
+// console.log removed
 
 // Показать форму авторизации
 function showAuthForm() {
@@ -57,12 +58,12 @@ function showAdminInterface() {
 
 // Обновление UI
 function updateUI(data) {
-  console.log('updateUI вызвана с данными:', data);
+  // console.log removed
   
   if (data.isAuthenticated) {
     if (data.userType === 'user') {
       // Интерфейс для обычного пользователя
-      console.log('Показываем интерфейс пользователя');
+      // console.log removed
       showUserInterface();
       
       if (userName) userName.textContent = data.userName || 'Пользователь';
@@ -93,7 +94,7 @@ function updateUI(data) {
       
     } else if (data.userType === 'admin') {
       // Интерфейс для администратора
-      console.log('Показываем интерфейс администратора');
+      // console.log removed
       showAdminInterface();
       
       if (adminUserName) adminUserName.textContent = data.userName || 'Администратор';
@@ -115,8 +116,8 @@ function updateUI(data) {
       }
       
       // Заполняем список профилей
-      console.log('adminProfileSelect существует:', !!adminProfileSelect);
-      console.log('data.availableProfiles:', data.availableProfiles);
+      // console.log removed
+      // console.log removed
       
       if (adminProfileSelect && data.availableProfiles) {
         adminProfileSelect.innerHTML = '<option value="">Выберите профиль...</option>';
@@ -142,7 +143,7 @@ function updateUI(data) {
       }
     }
   } else {
-    console.log('Показываем форму авторизации');
+    // console.log removed
     showAuthForm();
   }
 }
@@ -170,22 +171,22 @@ function refreshProfileInfo(maxTries = 10, delayMs = 400) {
 
 // Функция для обновления статуса прокси
 function updateProxyStatus(proxyStatus) {
-  console.log('Обновление статуса прокси:', proxyStatus);
+  // console.log removed
   
   // Обновляем статус для обычных пользователей
   if (userStatus) {
-    console.log('Обновляем статус для пользователя, userStatus найден:', userStatus);
+    // console.log removed
     if (proxyStatus.connected) {
       userStatus.textContent = 'Статус: Подключен';
       userStatus.className = 'user-status connected';
-      console.log('Статус установлен как "Статус: Подключен"');
+      // console.log removed
     } else {
       userStatus.textContent = 'Статус: Не подключен';
       userStatus.className = 'user-status disconnected';
-      console.log('Статус установлен как "Статус: Не подключен"');
+      // console.log removed
     }
   } else {
-    console.log('userStatus не найден!');
+    // console.log removed
   }
   
   // Обновляем статус для админа
@@ -223,7 +224,7 @@ function updateProxyStatus(proxyStatus) {
 
 // Функция для показа кнопки "Попробовать снова"
 function showRetryButton() {
-  console.log('Показываем кнопку "Попробовать снова"');
+  // console.log removed
   
   // Создаем кнопку если её нет
   let retryButton = document.getElementById('retryButton');
@@ -256,7 +257,7 @@ function showRetryButton() {
   
   // Добавляем обработчик клика
   retryButton.onclick = () => {
-    console.log('Клик по кнопке "Попробовать снова"');
+    // console.log removed
     chrome.runtime.sendMessage({ action: 'retryConnection' }, (response) => {
       if (response && response.success) {
         showMessage('Попытка переподключения...', 'info');
@@ -303,7 +304,7 @@ if (btnUserLogout) {
     });
   });
 } else {
-  console.log('btnUserLogout не найден');
+  // console.log removed
 }
 
 // Обработчики для администратора
@@ -321,7 +322,7 @@ if (btnAdminAuto) {
     });
   });
 } else {
-  console.log('btnAdminAuto не найден');
+  // console.log removed
 }
 
 if (btnAdminSave) {
@@ -344,10 +345,32 @@ if (btnAdminSave) {
     });
   });
 } else {
-  console.log('btnAdminSave не найден');
+  // console.log removed
 }
 
 // Управляющие кнопки включить/выключить удалены: подключение происходит автоматически при выборе профиля
+
+if (btnAdminUnblock) {
+  btnAdminUnblock.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'unblockInternet' }, (response) => {
+      if (response && response.success) {
+        showMessage(response.message, 'success');
+        // Обновляем UI после разблокировки
+        setTimeout(() => {
+          chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (data) => {
+            if (data) {
+              updateUI(data);
+            }
+          });
+        }, 1000);
+      } else {
+        showMessage(response ? response.message : 'Ошибка разблокировки', 'error');
+      }
+    });
+  });
+} else {
+  // console.log removed
+}
 
 if (btnAdminLogout) {
   btnAdminLogout.addEventListener('click', () => {
@@ -359,7 +382,7 @@ if (btnAdminLogout) {
     });
   });
 } else {
-  console.log('btnAdminLogout не найден');
+  // console.log removed
 }
 
 // Авторизация по Enter
@@ -370,7 +393,7 @@ if (passwordInput) {
     }
   });
 } else {
-  console.log('passwordInput не найден');
+  // console.log removed
 }
 
 // Загрузка информации при открытии popup
@@ -399,7 +422,7 @@ chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (response) => {
 setTimeout(() => {
   chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (response) => {
     if (response && response.proxyStatus) {
-      console.log('Дополнительная проверка статуса при открытии popup:', response.proxyStatus);
+      // console.log removed
       updateProxyStatus(response.proxyStatus);
       
       // Скрываем кнопку "Попробовать снова" если прокси подключен
@@ -448,12 +471,12 @@ startStatusMonitoring();
 // Слушаем уведомления от background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'proxyStatusChanged') {
-    console.log('Получено уведомление об изменении статуса прокси:', request.proxyStatus);
+    // console.log removed
     updateProxyStatus(request.proxyStatus);
   } else if (request.action === 'requestPassword') {
     // Запрос пароля от background script
     const { username, profileName } = request;
-    console.log(`Запрос пароля для пользователя ${username}`);
+    // console.log removed
     
     // Показываем диалог запроса пароля
     const password = prompt(`Введите пароль для пользователя ${username} (${profileName}):`);
@@ -467,7 +490,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
   } else if (request.action === 'proxyConnected') {
-    console.log('Получено уведомление об успешном подключении:', request.message);
+    // console.log removed
     
     // Показываем красивое popup уведомление об успехе
     showSuccessNotification(request.message);
@@ -480,10 +503,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     // Обновляем статус прокси сразу из полученных данных
     if (request.proxyStatus) {
-      console.log('Получен proxyStatus в proxyConnected:', request.proxyStatus);
+      // console.log removed
       updateProxyStatus(request.proxyStatus);
     } else {
-      console.log('proxyStatus не получен в proxyConnected');
+      // console.log removed
     }
     
     // Обновляем UI
@@ -496,25 +519,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     });
   } else if (request.action === 'proxyDisconnected') {
-    console.log('Получено уведомление об отключении прокси:', request.message);
+    // console.log removed
     
-    // Показываем специальное уведомление для ошибок прокси
-    showProxyErrorNotification(request.message);
+    // Проверяем, заблокирован ли интернет
+    if (request.internetBlocked) {
+      // console.log removed
+      
+      // Показываем специальное уведомление о блокировке
+      showInternetBlockedNotification(request.message);
+      
+      // Скрываем кнопку "Попробовать снова" - она бесполезна при блокировке
+      const retryButton = document.getElementById('retryButton');
+      if (retryButton) {
+        retryButton.style.display = 'none';
+      }
+      
+    } else {
+      // Обычное отключение прокси
+      showProxyErrorNotification(request.message);
+      
+      // Показываем кнопку "Попробовать снова" если нужно
+      if (request.showRetryButton) {
+        showRetryButton();
+      }
+    }
     
     // Дополнительно показываем системное уведомление
     try {
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('🔌 ПРОКСИ НЕ ПОДКЛЮЧЕН!', {
-          body: request.message
+        const title = request.internetBlocked ? '🔒 ИНТЕРНЕТ ЗАБЛОКИРОВАН!' : '🔌 ПРОКСИ НЕ ПОДКЛЮЧЕН!';
+        new Notification(title, {
+          body: request.message,
+          icon: 'icons/icon.svg'
         });
       }
     } catch (e) {
-      console.log('Ошибка системного уведомления в popup:', e);
-    }
-    
-    // Показываем кнопку "Попробовать снова" если нужно
-    if (request.showRetryButton) {
-      showRetryButton();
+      // Ошибка системного уведомления в popup
     }
     
     // Обновляем статус прокси сразу (устанавливаем как не подключен)
@@ -539,7 +579,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Обновляем UI при фокусе на popup
 window.addEventListener('focus', () => {
-  console.log('Popup получил фокус, обновляем данные');
+  // console.log removed
   chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (data) => {
     if (data) {
       updateUI(data);
@@ -578,7 +618,7 @@ document.addEventListener('click', () => {
 // Обновляем UI при видимости popup
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    console.log('Popup стал видимым, обновляем данные');
+    // console.log removed
     chrome.runtime.sendMessage({ action: 'getProfileInfo' }, (data) => {
       if (data) {
         updateUI(data);
@@ -611,7 +651,7 @@ if (btnLogin) {
       } else {
         // Проверяем, истекла ли лицензия
         if (response && response.licenseExpired) {
-          console.log('❌ Лицензия истекла, показываем уведомление');
+          // console.log removed
           
           // Показываем красивое модальное окно об истечении лицензии
           showLicenseExpiredNotification(response.message || 'Лицензия истекла.\n\nОбратитесь к администратору для продления.');
@@ -626,7 +666,7 @@ if (btnLogin) {
     });
   });
 } else {
-  console.log('btnLogin не найден');
+  // console.log removed
 }
 
 // Переключение профиля для администратора
@@ -651,7 +691,7 @@ if (adminProfileSelect) {
     }
   });
 } else {
-  console.log('adminProfileSelect не найден');
+  // console.log removed
 }
 
 // Функция для показа красивого уведомления об успехе
@@ -849,5 +889,55 @@ function showProxyErrorNotification(message) {
       modal.remove();
     }
   }, 8000);
+}
+
+// Функция для показа уведомления о блокировке интернета
+function showInternetBlockedNotification(message) {
+  // Создаем модальное окно для уведомления о блокировке интернета
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    background: linear-gradient(135deg, #f44336, #d32f2f);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    color: white;
+    text-align: center;
+  `;
+  
+  notification.innerHTML = `
+    <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+    <div style="font-size: 24px; margin-bottom: 16px; font-weight: bold;">ИНТЕРНЕТ ЗАБЛОКИРОВАН!</div>
+    <div style="font-size: 14px; line-height: 1.6; opacity: 0.95;">${(message || 'Интернет заблокирован для защиты IP адреса.').replace(/\n/g, '<br>')}</div>
+    <div style="font-size: 12px; margin-top: 16px; opacity: 0.8;">Обратитесь к администратору для разблокировки</div>
+  `;
+  
+  notification.className = 'internet-blocked-modal';
+  modal.appendChild(notification);
+  document.body.appendChild(modal);
+  
+  // НЕ закрываем автоматически - пользователь должен обратиться к админу
+  // Закрываем только при клике
+  modal.addEventListener('click', () => {
+    if (modal.parentNode) {
+      modal.remove();
+    }
+  });
 }
 

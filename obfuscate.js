@@ -2,50 +2,67 @@ const JavaScriptObfuscator = require('javascript-obfuscator');
 const fs = require('fs');
 const path = require('path');
 
-// Конфигурация обфускации для service worker
-const obfuscationOptions = {
+// Базовая конфигурация обфускации + профили для разных файлов
+const baseObfuscationOptions = {
     compact: true,
     controlFlowFlattening: true,
-    controlFlowFlatteningThreshold: 0.75,
+    controlFlowFlatteningThreshold: 1.0,
     deadCodeInjection: true,
-    deadCodeInjectionThreshold: 0.4,
-    debugProtection: false, // Отключаем для service worker
-    debugProtectionInterval: 0,
-    disableConsoleOutput: false, // Оставляем console для отладки
-    identifierNamesGenerator: 'hexadecimal',
+    deadCodeInjectionThreshold: 0.6,
+    debugProtection: true,
+    debugProtectionInterval: 3000,
+    disableConsoleOutput: true,
+    identifierNamesGenerator: 'mangled',
+    identifiersPrefix: '_' + Math.random().toString(36).slice(2, 10),
     log: false,
     numbersToExpressions: true,
-    renameGlobals: false,
-    selfDefending: false, // Отключаем для service worker
+    renameGlobals: true,
+    selfDefending: true,
     simplify: true,
     splitStrings: true,
-    splitStringsChunkLength: 5,
+    splitStringsChunkLength: 3,
     stringArray: true,
     stringArrayCallsTransform: true,
-    stringArrayEncoding: ['base64'],
+    stringArrayEncoding: ['rc4', 'base64'],
     stringArrayIndexShift: true,
     stringArrayRotate: true,
     stringArrayShuffle: true,
-    stringArrayWrappersCount: 2,
+    stringArrayWrappersCount: 5,
     stringArrayWrappersChainedCalls: true,
-    stringArrayWrappersParametersMaxCount: 4,
+    stringArrayWrappersParametersMaxCount: 6,
     stringArrayWrappersType: 'function',
-    stringArrayThreshold: 0.75,
+    stringArrayThreshold: 1.0,
     transformObjectKeys: true,
-    unicodeEscapeSequence: false,
-    // Дополнительные настройки для service worker
+    unicodeEscapeSequence: true,
     target: 'browser',
-    reservedNames: ['chrome', 'self', 'importScripts', 'addEventListener', 'removeEventListener'],
+    sourceMap: false,
+    // Резервируем системные идентификаторы/строки Chrome, чтобы не сломать API
+    reservedNames: ['chrome', 'self', 'importScripts', 'addEventListener', 'removeEventListener', 'onmessage', 'postMessage'],
     reservedStrings: ['chrome.runtime', 'chrome.proxy', 'chrome.storage', 'chrome.webRequest']
 };
 
+// Профиль для service worker (осторожнее с selfDefending/debugProtection)
+const swObfuscationOptions = {
+    ...baseObfuscationOptions,
+    // Некоторые анти-отладочные механизмы могут конфликтовать с MV3 service worker
+    debugProtection: false,
+    debugProtectionInterval: 0,
+    selfDefending: false,
+    disableConsoleOutput: false,
+};
+
+// Профиль для UI (popup) — максимально агрессивный
+const uiObfuscationOptions = {
+    ...baseObfuscationOptions
+};
+
 // Функция для обфускации файла
-function obfuscateFile(inputPath, outputPath) {
+function obfuscateFile(inputPath, outputPath, options) {
     try {
         console.log(`Обфускация файла: ${inputPath}`);
         
         const sourceCode = fs.readFileSync(inputPath, 'utf8');
-        const obfuscatedCode = JavaScriptObfuscator.obfuscate(sourceCode, obfuscationOptions);
+        const obfuscatedCode = JavaScriptObfuscator.obfuscate(sourceCode, options || baseObfuscationOptions);
         
         // Создаем директорию если не существует
         const outputDir = path.dirname(outputPath);
@@ -110,12 +127,14 @@ console.log('🚀 Начинаем обфускацию браузерного �
 // Обфусцируем JavaScript файлы
 obfuscateFile(
     path.join(__dirname, 'extensions', 'background_direct_new.js'),
-    path.join(outputDir, 'background_direct_new.js')
+    path.join(outputDir, 'background_direct_new.js'),
+    swObfuscationOptions
 );
 
 obfuscateFile(
     path.join(__dirname, 'extensions', 'popup.js'),
-    path.join(outputDir, 'popup.js')
+    path.join(outputDir, 'popup.js'),
+    uiObfuscationOptions
 );
 
 // Минифицируем JSON файлы

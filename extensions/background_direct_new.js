@@ -307,7 +307,7 @@ async function blockAllNetworkRequests() {
             removeRuleIds: [1]
         });
         
-        // Создаем правило блокировки всех запросов
+        // Создаем правило блокировки всех запросов, кроме доменов проверки IP
         const blockRule = {
             id: 1,
             priority: 1,
@@ -316,7 +316,8 @@ async function blockAllNetworkRequests() {
             },
             condition: {
                 urlFilter: '*',
-                resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket', 'other']
+                resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object', 'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket', 'other'],
+                excludedRequestDomains: ['api.ipify.org']
             }
         };
         
@@ -776,6 +777,15 @@ async function performProxyCheck() {
     }
 
     if (status.connected) {
+        // Если ранее был включен блок, снимаем его автоматически
+        if (internetBlocked) {
+            await unblockInternet();
+            chrome.storage.local.set({
+                internetBlocked: false,
+                blockReason: null,
+                blockTime: null
+            });
+        }
         // console.log removed
     } else {
         // console.log removed
@@ -1269,9 +1279,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             stopProxyMonitoring();
 
             // Отключаем прокси в браузере
-            chrome.proxy.settings.clear({scope: 'regular'}, () => {
+            chrome.proxy.settings.clear({scope: 'regular'}, async () => {
                 // console.log removed
                 
+                // Снимаем возможную блокировку интернета
+                await unblockInternet();
+                chrome.storage.local.set({
+                    internetBlocked: false,
+                    blockReason: null,
+                    blockTime: null
+                });
+
                 // Обновляем статус в storage
                 chrome.storage.local.set({
                     proxyEnabled: false,
@@ -1353,8 +1371,15 @@ chrome.runtime.onSuspend.addListener(async () => {
     stopProxyMonitoring();
 
     // Отключаем прокси
-    chrome.proxy.settings.clear({scope: 'regular'}, () => {
+    chrome.proxy.settings.clear({scope: 'regular'}, async () => {
         // console.log removed
+        // Снимаем возможную блокировку интернета
+        await unblockInternet();
+        chrome.storage.local.set({
+            internetBlocked: false,
+            blockReason: null,
+            blockTime: null
+        });
     });
 
     const data = await chrome.storage.local.get(['currentProfile']);

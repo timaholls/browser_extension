@@ -83,7 +83,7 @@ function updateUI(data) {
       
       if (data.profileInfo) {
         if (userProxyHost) userProxyHost.textContent = data.profileInfo.ip;
-        if (userProxyPort) userProxyPort.textContent = '1050';
+        if (userProxyPort) userProxyPort.textContent = String(data.profileInfo.port ?? '—');
         if (userProxyRegion) userProxyRegion.textContent = data.profileInfo.region;
       } else {
         // Очищаем данные если профиль отсутствует
@@ -106,7 +106,7 @@ function updateUI(data) {
       // Обновляем информацию о профиле
       if (data.profileInfo) {
         if (adminProxyHost) adminProxyHost.textContent = data.profileInfo.ip;
-        if (adminProxyPort) adminProxyPort.textContent = '1050';
+        if (adminProxyPort) adminProxyPort.textContent = String(data.profileInfo.port ?? '—');
         if (adminProxyRegion) adminProxyRegion.textContent = data.profileInfo.region;
       } else {
         // Очищаем данные если профиль отсутствует

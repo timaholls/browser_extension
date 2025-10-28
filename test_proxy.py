@@ -10,44 +10,44 @@ from typing import Dict, List, Tuple
 
 # Отключаем предупреждения SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+# rm -rf extensions_obfuscated && node obfuscate.js
 # Конфигурация прокси
 PROXY_CONFIGS = {
     'profile1': {
         'name': 'profile1',
-        'expected_ip': '45.139.125.123',
-        'upstream_proxy': '45.139.125.123:1050',
-        'username': 'fOwk1c',
-        'password': 'hBP8MJjtKg'
+        'expected_ip': '195.158.255.144',
+        'upstream_proxy': '195.158.255.144:60341',
+        'username': 'pD3eAehGmG',
+        'password': 'M2E7nVW38B'
     },
-    'profile2': {
-        'name': 'profile2',
-        'expected_ip': '91.188.244.4',
-        'upstream_proxy': '91.188.244.4:1050',
-        'username': 'fOwk1c',
-        'password': 'hBP8MJjtKg'
-    },
-    'profile3': {
-        'name': 'profile3',
-        'expected_ip': '185.181.245.211',
-        'upstream_proxy': '185.181.245.211:1050',
-        'username': 'fOwk1c',
-        'password': 'hBP8MJjtKg'
-    },
-    'profile4': {
-        'name': 'profile4',
-        'expected_ip': '188.130.187.174',
-        'upstream_proxy': '188.130.187.174:1050',
-        'username': 'fOwk1c',
-        'password': 'hBP8MJjtKg'
-    },
-    'profile5': {
-        'name': 'profile5',
-        'expected_ip': '45.140.53.190',
-        'upstream_proxy': '45.140.53.190:1050',
-        'username': 'fOwk1c',
-        'password': 'hBP8MJjtKg'
-    }
+    # 'profile2': {
+    #     'name': 'profile2',
+    #     'expected_ip': '91.188.244.4',
+    #     'upstream_proxy': '91.188.244.4:1050',
+    #     'username': 'fOwk1c',
+    #     'password': 'hBP8MJjtKg'
+    # },
+    # 'profile3': {
+    #     'name': 'profile3',
+    #     'expected_ip': '185.181.245.211',
+    #     'upstream_proxy': '185.181.245.211:1050',
+    #     'username': 'fOwk1c',
+    #     'password': 'hBP8MJjtKg'
+    # },
+    # 'profile4': {
+    #     'name': 'profile4',
+    #     'expected_ip': '188.130.187.174',
+    #     'upstream_proxy': '188.130.187.174:1050',
+    #     'username': 'fOwk1c',
+    #     'password': 'hBP8MJjtKg'
+    # },
+    # 'profile5': {
+    #     'name': 'profile5',
+    #     'expected_ip': '45.140.53.190',
+    #     'upstream_proxy': '45.140.53.190:1050',
+    #     'username': 'fOwk1c',
+    #     'password': 'hBP8MJjtKg'
+    # }
 }
 
 # Настройки тестирования

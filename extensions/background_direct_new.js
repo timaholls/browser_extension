@@ -4,58 +4,47 @@ const EMBEDDED_CONFIG = {
     "user1": {
       "name": "Profile 1",
       "proxy": {
-        "host": "pool.proxy.market",
-        "port": 10050,
-        "username": "JhCkljdaqJvL",
-        "password": "57MjVdoa"
+        "host": "195.158.255.144",
+        "port": 60341,
+        "username": "pD3eAehGmG",
+        "password": "M2E7nVW38B"
       },
-      "ip": "93.170.248.211",
+      "ip": "195.158.255.144",
       "region": "Россия"
     },
     "user2": {
       "name": "Profile 2",
       "proxy": {
-        "host": "pool.proxy.market",
-        "port": 10051,
-        "username": "CRlaRkToaY9J",
-        "password": "7mEZj019"
+        "host": "46.161.31.183",
+        "port": 60888,
+        "username": "4tS4WbbJfG",
+        "password": "ZGVZFcKweB"
       },
-      "ip": "91.188.244.4",
+      "ip": "46.161.31.183",
       "region": "Россия"
     },
     "user3": {
       "name": "Profile 3",
       "proxy": {
-        "host": "pool.proxy.market",
-        "port": 10052,
-        "username": "qoTweJTfbBF5",
-        "password": "qe7C5b1h"
+        "host": "5.8.16.192",
+        "port": 60345,
+        "username": "8ahPNVHTnC",
+        "password": "7g7ZNvRCZ3"
       },
-      "ip": "185.181.245.211",
+      "ip": "5.8.16.192",
       "region": "Россия"
     },
     "user4": {
       "name": "Profile 4",
       "proxy": {
-        "host": "pool.proxy.market",
-        "port": 10053,
-        "username": "d9LfwLJoTpRA",
-        "password": "byRTx5tw"
+        "host": "194.226.247.32",
+        "port": 62498,
+        "username": "U6W2kspYF6",
+        "password": "V7bQPtwG5N"
       },
-      "ip": "188.130.187.174",
+      "ip": "194.226.247.32",
       "region": "Россия"
     },
-    "user5": {
-      "name": "Profile 5",
-      "proxy": {
-        "host": "45.139.125.123",
-        "port": 1050,
-        "username": "fOwk1c",
-        "password": "hBP8MJjtKg"
-      },
-      "ip": "188.130.187.174",
-      "region": "Россия"
-    }
   },
   "settings": {
     "productionMode": true,

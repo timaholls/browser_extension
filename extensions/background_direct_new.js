@@ -2,7 +2,7 @@
 const EMBEDDED_CONFIG = {
   "profiles": {
     "user1": {
-      "name": "Profile 1",
+      "name": "Рус2",
       "proxy": {
         "host": "195.158.255.144",
         "port": 60341,
@@ -13,7 +13,7 @@ const EMBEDDED_CONFIG = {
       "region": "Россия"
     },
     "user2": {
-      "name": "Profile 2",
+      "name": "Рус3",
       "proxy": {
         "host": "46.161.31.183",
         "port": 60888,
@@ -24,7 +24,7 @@ const EMBEDDED_CONFIG = {
       "region": "Россия"
     },
     "user3": {
-      "name": "Profile 3",
+      "name": "Анж",
       "proxy": {
         "host": "5.8.16.192",
         "port": 60345,
@@ -35,7 +35,7 @@ const EMBEDDED_CONFIG = {
       "region": "Россия"
     },
     "user4": {
-      "name": "Profile 4",
+      "name": "Юли",
       "proxy": {
         "host": "194.226.247.32",
         "port": 62498,
@@ -53,7 +53,7 @@ const EMBEDDED_CONFIG = {
     "monitoringInterval": 30000
   },
   "license": {
-    "installDate": "2025-10-28T09:35:50+05:00",
+    "installDate": "2025-10-31T09:35:50+05:00",
     "validDays": 60
   }
 };

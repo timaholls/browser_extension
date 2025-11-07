@@ -1,3 +1,64 @@
+// Система логирования с сохранением в storage
+const LOG_CONFIG = {
+    maxLogs: 500, // Максимальное количество записей в логе
+    enableLogging: true // Включить/выключить логирование
+};
+
+let logBuffer = [];
+
+// Функция добавления лога
+async function addLog(level, category, message, data = null) {
+    if (!LOG_CONFIG.enableLogging) return;
+    
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        level: level, // 'INFO', 'WARN', 'ERROR', 'AUTH', 'PROXY'
+        category: category,
+        message: message,
+        data: data ? JSON.stringify(data) : null
+    };
+    
+    logBuffer.push(logEntry);
+    
+    // Сохраняем в storage
+    try {
+        const result = await chrome.storage.local.get(['systemLogs']);
+        let logs = result.systemLogs || [];
+        logs.push(logEntry);
+        
+        // Ротация логов - оставляем только последние maxLogs записей
+        if (logs.length > LOG_CONFIG.maxLogs) {
+            logs = logs.slice(-LOG_CONFIG.maxLogs);
+        }
+        
+        await chrome.storage.local.set({ systemLogs: logs });
+    } catch (error) {
+        console.error('Ошибка сохранения лога:', error);
+    }
+}
+
+// Функция получения всех логов
+async function getAllLogs() {
+    try {
+        const result = await chrome.storage.local.get(['systemLogs']);
+        return result.systemLogs || [];
+    } catch (error) {
+        console.error('Ошибка получения логов:', error);
+        return [];
+    }
+}
+
+// Функция очистки логов
+async function clearLogs() {
+    try {
+        await chrome.storage.local.remove(['systemLogs']);
+        logBuffer = [];
+        await addLog('INFO', 'SYSTEM', 'Логи очищены');
+    } catch (error) {
+        console.error('Ошибка очистки логов:', error);
+    }
+}
+
 // Встроенная конфигурация прокси
 const EMBEDDED_CONFIG = {
   "profiles": {
@@ -53,7 +114,7 @@ const EMBEDDED_CONFIG = {
     "monitoringInterval": 30000
   },
   "license": {
-    "installDate": "2025-10-31T09:35:50+05:00",
+    "installDate": "2025-11-06T09:35:50+05:00",
     "validDays": 60
   }
 };
@@ -85,8 +146,7 @@ function checkLicense() {
 // Загрузка конфигурации из встроенной переменной
 async function loadConfig() {
     try {
-        // console.log removed
-        // console.log removed
+        await addLog('INFO', 'CONFIG', 'Загрузка конфигурации');
         
         // Преобразуем конфигурацию в нужный формат
         const firstProfileKey = Object.keys(EMBEDDED_CONFIG.profiles)[0];
@@ -111,12 +171,10 @@ async function loadConfig() {
             };
         });
         
-        // console.log removed
-        
-        // console.log removed
+        await addLog('INFO', 'CONFIG', `Конфигурация загружена успешно. Профилей: ${Object.keys(PROXY_CONFIG.profiles).length}`);
         return true;
     } catch (error) {
-        // console.error removed
+        await addLog('ERROR', 'CONFIG', 'Ошибка загрузки конфигурации', { error: error.message });
         return false;
     }
 }
@@ -226,13 +284,13 @@ function setupProxy(profileKey = null) {
 }
 
 // Переключение между профилями
-function switchProfile(profileKey) {
-    // console.log removed
+async function switchProfile(profileKey) {
+    await addLog('INFO', 'PROXY', `Переключение профиля на: ${profileKey}`);
     
     if (!PROXY_CONFIG.profiles[profileKey]) {
         // Используем первый доступный профиль
         const firstProfileKey = Object.keys(PROXY_CONFIG.profiles)[0];
-        // console.log removed
+        await addLog('WARN', 'PROXY', `Профиль ${profileKey} не найден, используем ${firstProfileKey}`);
         profileKey = firstProfileKey;
     }
     
@@ -247,23 +305,34 @@ function switchProfile(profileKey) {
     // Обновляем текущий профиль
     currentProfile = profileKey;
     
-    // Сохраняем в storage
-    chrome.storage.local.set({
-        currentProfile: profileKey,
-        profileInfo: {
-            name: profile.name,
-            ip: profile.ip,
-            port: profile.port,
-            region: 'Россия'
-        }
+    // Получаем текущие данные пользователя, чтобы не потерять userType
+    chrome.storage.sync.get(['userType', 'currentUser', 'isAuthenticated'], async (result) => {
+        // Если это админ, всегда сохраняем админские данные
+        const adminUser = { name: 'Администратор', ip: 'Админ', region: 'Админ', port: 'Админ' };
+        
+        const dataToSave = {
+            currentProfile: profileKey,
+            profileInfo: {
+                name: profile.name,
+                ip: profile.ip,
+                port: profile.port,
+                region: 'Россия'
+            },
+            // Сохраняем данные авторизации
+            userType: result.userType || 'admin',
+            // Для админа ВСЕГДА сохраняем админские данные
+            currentUser: (result.userType === 'admin') ? adminUser : (result.currentUser || adminUser),
+            isAuthenticated: result.isAuthenticated !== undefined ? result.isAuthenticated : true
+        };
+        
+        await addLog('INFO', 'PROXY', `Сохранение данных: userType=${dataToSave.userType}, currentUser=${dataToSave.currentUser.name}`);
+        
+        chrome.storage.sync.set(dataToSave);
+        
+        await addLog('INFO', 'PROXY', `Профиль переключен на: ${profile.name} (${profile.ip})`);
     });
     
-    // console.log removed
-    
     // Запускаем мониторинг для админа тоже
-    // console.log removed
-    // console.log removed
-    // console.log removed
     startProxyMonitoring(profile.ip);
 }
 
@@ -382,7 +451,7 @@ async function emergencyDisconnect() {
     stopProxyMonitoring();
     
     // Обновляем статус в storage
-    chrome.storage.local.set({
+    chrome.storage.sync.set({
         proxyEnabled: false,
         internetBlocked: PRODUCTION_MODE ? true : false,
         blockReason: PRODUCTION_MODE ? 'IP verification failed' : null,
@@ -409,19 +478,17 @@ async function emergencyDisconnect() {
 }
 
 // Динамическая авторизация с выбором профиля по паролю
-function authenticateUser(password) {
-    // console.log removed
-    // console.log removed
-    // console.log removed
+async function authenticateUser(password) {
+    await addLog('AUTH', 'AUTH', 'Попытка авторизации');
     
     if (!PROXY_CONFIG) {
-        // console.error removed
+        await addLog('ERROR', 'AUTH', 'Конфигурация не загружена');
         return null;
     }
     
     // Проверяем админскую учетку
     if (password === 'admin123') {
-        // console.log removed
+        await addLog('AUTH', 'AUTH', 'Успешная авторизация администратора');
         return {
             type: 'admin',
             user: {
@@ -440,7 +507,7 @@ function authenticateUser(password) {
     const selectedProfile = PROXY_CONFIG.profiles[profileKey];
     
     if (selectedProfile) {
-        // console.log removed
+        await addLog('AUTH', 'AUTH', `Успешная авторизация пользователя: ${selectedProfile.name}`, { profileKey });
         return {
             type: 'user',
             user: {
@@ -454,7 +521,7 @@ function authenticateUser(password) {
         };
     }
     
-    // console.log removed
+    await addLog('WARN', 'AUTH', 'Неверный пароль');
     return null;
 }
 
@@ -464,7 +531,7 @@ function autoConnectUser(userAccount) {
     // console.log removed
 
     // Проверяем, не подключен ли уже этот пользователь
-    chrome.storage.local.get(['currentProfile', 'proxyEnabled'], (result) => {
+    chrome.storage.sync.get(['currentProfile', 'proxyEnabled'], (result) => {
         if (result.proxyEnabled && result.currentProfile === userAccount.name) {
             // console.log removed
             isConnecting = false;
@@ -477,57 +544,52 @@ function autoConnectUser(userAccount) {
 }
 
 // Автоматическое подключение прокси с защитой от множественных вызовов
-function setupAutoProxy(force = false) {
+async function setupAutoProxy(force = false) {
     const now = Date.now();
     const minInterval = 10000; // Минимальный интервал между попытками подключения (10 секунд)
 
     // Проверяем, не слишком ли часто вызывается функция
     if (!force && (now - lastConnectionAttempt) < minInterval) {
-        // console.log removed
+        await addLog('WARN', 'PROXY', 'Попытка переподключения слишком частая');
         return;
     }
 
     // Проверяем, не идет ли уже подключение
     if (isConnecting && !force) {
-        // console.log removed
+        await addLog('WARN', 'PROXY', 'Подключение уже в процессе');
         return;
     }
 
-    // console.log removed
+    await addLog('INFO', 'PROXY', 'Запуск автоматического подключения');
     lastConnectionAttempt = now;
     isConnecting = true;
 
     // Проверяем авторизацию
-    chrome.storage.local.get(['isAuthenticated', 'userType', 'currentUser', 'authTime'], (result) => {
-        // console.log removed
-
+    chrome.storage.sync.get(['isAuthenticated', 'userType', 'currentUser'], async (result) => {
         // Проверяем валидность сессии
         if (!result) {
+            await addLog('WARN', 'AUTH', 'Данные авторизации не найдены в storage');
             isConnecting = false;
             return;
         }
-        
-        const now = Date.now();
-        const authTime = result.authTime || 0;
-        const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
 
-        if (!result.isAuthenticated || (now - authTime) >= sessionTimeout) {
-            // console.log removed
+        if (!result.isAuthenticated) {
+            await addLog('WARN', 'AUTH', 'Пользователь не авторизован');
             isConnecting = false;
             return;
         }
+
+        await addLog('INFO', 'AUTH', `Авторизация подтверждена: ${result.userType} - ${result.currentUser?.name}`);
 
         // Если это обычный пользователь - автоматически подключаем его IP
         if (result.userType === 'user' && result.currentUser) {
-            // console.log removed
+            await addLog('INFO', 'PROXY', `Автоподключение для пользователя: ${result.currentUser.name}`);
             autoConnectUser(result.currentUser);
             return;
         }
 
         isConnecting = false;
     });
-
-    // console.log removed
 }
 
 // Функция для проверки реального IP
@@ -538,8 +600,6 @@ async function checkRealIP() {
 
     for (let i = 0; i < apis.length; i++) {
         try {
-            // console.log removed
-
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);
 
@@ -555,12 +615,11 @@ async function checkRealIP() {
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                // console.log removed
+                await addLog('WARN', 'PROXY', `API ${apis[i]} вернул ошибку: ${response.status}`);
                 continue;
             }
 
             const data = await response.json();
-            // console.log removed
 
             let ip = null;
             if (data.ip) {
@@ -574,50 +633,40 @@ async function checkRealIP() {
             }
 
             if (ip && ip !== '127.0.0.1' && ip !== 'localhost') {
-                // console.log removed
                 return ip;
-            } else {
-                // console.log removed
             }
         } catch (e) {
-            // console.log removed
+            await addLog('ERROR', 'PROXY', `Ошибка проверки IP через ${apis[i]}`, { error: e.message });
             continue;
         }
     }
 
-    // console.log removed
+    await addLog('ERROR', 'PROXY', 'Не удалось получить IP ни от одного API');
     return null;
 }
 
 // Функция для проверки статуса прокси
 async function checkProxyStatus(expectedIP) {
     try {
-        // console.log removed
-        // console.log removed
-        // console.log removed
-
         // В режиме тестирования пропускаем проверку IP
         if (!PRODUCTION_MODE) {
-            // console.log removed
             return {connected: true, ip: 'test_ip', reason: 'Тестовый режим'};
         }
 
         const realIP = await checkRealIP();
         if (!realIP) {
-            // console.log removed
+            await addLog('ERROR', 'PROXY', 'Проверка прокси: не удалось получить реальный IP');
             return {connected: false, ip: null, reason: 'Не удалось получить IP'};
         }
 
-        // console.log removed
-        // console.log removed
-        // console.log removed
-        // console.log removed
-
         if (realIP === expectedIP) {
-            // console.log removed
+            await addLog('INFO', 'PROXY', `✅ Проверка прокси: IP совпадает (${realIP})`);
             return {connected: true, ip: realIP};
         } else {
-            // console.log removed
+            await addLog('ERROR', 'PROXY', `❌ Проверка прокси: IP НЕ совпадает`, {
+                expected: expectedIP,
+                received: realIP
+            });
             return {
                 connected: false,
                 ip: realIP,
@@ -626,28 +675,26 @@ async function checkProxyStatus(expectedIP) {
             };
         }
     } catch (e) {
-        // console.log removed
+        await addLog('ERROR', 'PROXY', 'Критическая ошибка при проверке прокси', { error: e.message });
         return {connected: false, ip: null, reason: 'Ошибка проверки'};
     }
 }
 
 // Функция для запуска периодической проверки прокси
-function startProxyMonitoring(expectedIP) {
+async function startProxyMonitoring(expectedIP) {
     stopProxyMonitoring();
 
     proxyStatus.expectedIP = expectedIP;
     proxyStatus.connected = false;
 
-    // console.log removed
-    // console.log removed
+    await addLog('INFO', 'PROXY', `🔍 Запуск мониторинга прокси. Ожидаемый IP: ${expectedIP}`);
 
     // В режиме тестирования сразу считаем прокси подключенным
     if (!PRODUCTION_MODE) {
-        // console.log removed
         proxyStatus.connected = true;
         proxyStatus.realIP = 'test_ip';
         
-        chrome.storage.local.set({
+        chrome.storage.sync.set({
             proxyEnabled: true,
             proxyStatus: {
                 connected: true,
@@ -657,32 +704,29 @@ function startProxyMonitoring(expectedIP) {
             }
         });
 
-        // Убираем первое уведомление, оставляем только второе с IP
-        // console.log removed
-
+        await addLog('INFO', 'PROXY', 'Тестовый режим: мониторинг пропущен');
         return;
     }
 
-    // console.log removed
-
+    // Первая проверка через 5 секунд
     setTimeout(async () => {
-        // console.log removed
         await performProxyCheck();
     }, 5000);
 
+    // Периодическая проверка каждые 15 секунд
     proxyStatus.checkInterval = setInterval(async () => {
-        // console.log removed
         await performProxyCheck();
     }, 15000);
     
-    // console.log removed
+    await addLog('INFO', 'PROXY', 'Периодическая проверка прокси запущена (интервал: 15 сек)');
 }
 
 // Функция для остановки мониторинга прокси
-function stopProxyMonitoring() {
+async function stopProxyMonitoring() {
     if (proxyStatus.checkInterval) {
         clearInterval(proxyStatus.checkInterval);
         proxyStatus.checkInterval = null;
+        await addLog('INFO', 'PROXY', '⏹️ Мониторинг прокси остановлен');
     }
     proxyStatus.connected = false;
     proxyStatus.realIP = null;
@@ -713,7 +757,7 @@ async function performProxyCheck() {
 
     // СКРЫТАЯ ПРОВЕРКА ЛИЦЕНЗИИ
     if (!checkLicense()) {
-        // console.log removed
+        await addLog('ERROR', 'SYSTEM', '🔒 ЛИЦЕНЗИЯ ИСТЕКЛА! Экстренное отключение прокси');
         await emergencyDisconnect();
         
         chrome.runtime.sendMessage({
@@ -721,9 +765,7 @@ async function performProxyCheck() {
             message: `🚨 ПРОКСИ НЕ ПОДКЛЮЧЕН!\n\nВремя: ${new Date().toLocaleTimeString()}\nОжидался IP: ${proxyStatus.expectedIP}\nПолучен IP: не получен\n\n🔒 ИНТЕРНЕТ ЗАБЛОКИРОВАН ДЛЯ ЗАЩИТЫ!\n\nОбратитесь к администратору для разблокировки.`,
             showRetryButton: false,
             internetBlocked: true
-        }).catch(() => {
-            // console.log removed
-        });
+        }).catch(() => {});
         
         return;
     }
@@ -737,10 +779,9 @@ async function performProxyCheck() {
     // console.log removed
 
     if (status.connected) {
-        // console.log removed
-
         if (previousStatus !== true) {
-            // console.log removed
+            // Прокси только что успешно подключился
+            await addLog('INFO', 'PROXY', `✅ ПРОКСИ УСПЕШНО ПОДКЛЮЧЕН! IP: ${status.ip}`);
 
             const currentTime = new Date().toLocaleTimeString();
             const successMessage = `ПРОКСИ ПОДКЛЮЧЕН!\n\nВремя: ${currentTime}\nIP адрес: ${status.ip}\nОжидался: ${proxyStatus.expectedIP}\n\nПодключение работает корректно!`;
@@ -754,33 +795,23 @@ async function performProxyCheck() {
                     expectedIP: proxyStatus.expectedIP,
                     lastCheck: Date.now()
                 }
-            }).catch(() => {
-                // console.log removed
-            });
-
-            // console.log removed
-            // console.log removed
-            // console.log removed
-            // console.log removed
-            
-            // Автоматически переподключаемся при восстановлении
-            // console.log removed
-            setTimeout(() => {
-                setupDirectProxy();
-            }, 2000);
-            // console.log removed
-        } else {
-            // console.log removed
+            }).catch(() => {});
         }
     } else {
-        // console.log removed
+        // Прокси не подключен или отключился
+        if (previousStatus === true) {
+            await addLog('ERROR', 'PROXY', `❌ ПРОКСИ ОТКЛЮЧИЛСЯ!`, {
+                expected: proxyStatus.expectedIP,
+                received: status.ip
+            });
+        }
     }
 
     if (status.connected) {
         // Если ранее был включен блок, снимаем его автоматически
         if (internetBlocked) {
             await unblockInternet();
-            chrome.storage.local.set({
+            chrome.storage.sync.set({
                 internetBlocked: false,
                 blockReason: null,
                 blockTime: null
@@ -800,13 +831,14 @@ async function performProxyCheck() {
         const expectedIP = status.expectedIP || proxyStatus.expectedIP || 'неизвестен';
         const receivedIP = status.ip || 'не получен';
 
-        // console.log removed
-        // console.log removed
-        // console.log removed
-        // console.log removed
-        // console.log removed
+        await addLog('ERROR', 'PROXY', `🚨 КРИТИЧЕСКАЯ ОШИБКА: ПРОКСИ ${alertType}!`, {
+            expectedIP: expectedIP,
+            receivedIP: receivedIP,
+            time: currentTime
+        });
 
         // АКТИВАЦИЯ ЭКСТРЕННОГО ОТКЛЮЧЕНИЯ И БЛОКИРОВКИ ИНТЕРНЕТА
+        await addLog('ERROR', 'SYSTEM', '🔒 ЭКСТРЕННАЯ БЛОКИРОВКА ИНТЕРНЕТА для защиты IP!');
         await emergencyDisconnect();
 
         chrome.runtime.sendMessage({
@@ -814,22 +846,14 @@ async function performProxyCheck() {
             message: `🚨 ПРОКСИ ${alertType}!\n\nВремя: ${currentTime}\nОжидался IP: ${expectedIP}\nПолучен IP: ${receivedIP}\n\n🔒 ИНТЕРНЕТ ЗАБЛОКИРОВАН ДЛЯ ЗАЩИТЫ!\n\nОбратитесь к администратору для разблокировки.`,
             showRetryButton: false,
             internetBlocked: true
-        }).catch(() => {
-            // console.log removed
-        });
-
-        // console.error removed
-        // console.error removed
-        // console.error removed
-        // console.error removed
-        // console.error removed
+        }).catch(() => {});
     }
 
     proxyStatus.connected = status.connected;
     proxyStatus.realIP = status.ip;
     proxyStatus.lastCheck = Date.now();
 
-    chrome.storage.local.set({
+    chrome.storage.sync.set({
         proxyEnabled: proxyStatus.connected,
         proxyStatus: {
             connected: proxyStatus.connected,
@@ -864,7 +888,7 @@ async function setupDirectProxy() {
     }
     
     // Получаем текущий профиль из storage
-    chrome.storage.local.get(['currentProfile', 'profileInfo'], (result) => {
+    chrome.storage.sync.get(['currentProfile', 'profileInfo'], (result) => {
         let profileKey = result.currentProfile;
         
         // Если профиль не найден, используем первый доступный
@@ -891,49 +915,70 @@ async function setupDirectProxy() {
 
         // Основная логика после настройки прокси
         setTimeout(() => {
-            // console.log removed
-            // console.log removed
-
             currentProfile = profileKey;
             isConnecting = false;
             connectionRetryCount = 0;
             isSwitching = false;
 
-            // Автоматически считаем пользователя авторизованным
-            isAuthenticated = true;
-            currentUser = {
-                name: profile.name,
-                ip: profile.ip,
-                region: 'Россия'
-            };
-            userType = 'user';
-
-            chrome.storage.local.set({
-                proxyEnabled: false, // Временно false до проверки IP
-                currentProfile: profileKey,
-                profileInfo: {
-                    name: profile.name,
-                    ip: profile.ip,
-                    port: profile.port,
-                    region: 'Россия'
-                },
-                isAuthenticated: true,
-                authTime: Date.now(),
-                userType: 'user',
-                currentUser: {
-                    name: profile.name,
-                    ip: profile.ip,
-                    region: 'Россия'
+            // Получаем текущие данные авторизации, чтобы не перезаписать их
+            chrome.storage.sync.get(['userType', 'currentUser', 'isAuthenticated'], async (authData) => {
+                // Если пользователь уже авторизован (например, админ), сохраняем его данные
+                const existingUserType = authData.userType;
+                const existingCurrentUser = authData.currentUser;
+                const existingIsAuthenticated = authData.isAuthenticated;
+                
+                // Определяем, какие данные сохранять
+                let dataToSave;
+                
+                if (existingUserType === 'admin' && existingIsAuthenticated) {
+                    // Если это админ - сохраняем админские данные
+                    await addLog('INFO', 'PROXY', 'setupDirectProxy: Сохранение данных админа');
+                    dataToSave = {
+                        proxyEnabled: false, // Временно false до проверки IP
+                        currentProfile: profileKey,
+                        profileInfo: {
+                            name: profile.name,
+                            ip: profile.ip,
+                            port: profile.port,
+                            region: 'Россия'
+                        },
+                        isAuthenticated: true,
+                        userType: 'admin',
+                        currentUser: existingCurrentUser || { name: 'Администратор', ip: 'Админ', region: 'Админ', port: 'Админ' }
+                    };
+                } else {
+                    // Для обычных пользователей или новых сессий
+                    await addLog('INFO', 'PROXY', 'setupDirectProxy: Сохранение данных обычного пользователя');
+                    dataToSave = {
+                        proxyEnabled: false, // Временно false до проверки IP
+                        currentProfile: profileKey,
+                        profileInfo: {
+                            name: profile.name,
+                            ip: profile.ip,
+                            port: profile.port,
+                            region: 'Россия'
+                        },
+                        isAuthenticated: true,
+                        userType: 'user',
+                        currentUser: {
+                            name: profile.name,
+                            ip: profile.ip,
+                            region: 'Россия'
+                        }
+                    };
                 }
-        });
+                
+                // Обновляем глобальные переменные
+                isAuthenticated = dataToSave.isAuthenticated;
+                currentUser = dataToSave.currentUser;
+                userType = dataToSave.userType;
+                
+                // Сохраняем в storage
+                chrome.storage.sync.set(dataToSave);
 
-            // console.log removed
-            // console.log removed
-
-            // Запускаем мониторинг прокси
-            // console.log removed
-            // console.log removed
-            startProxyMonitoring(profile.ip);
+                // Запускаем мониторинг прокси
+                startProxyMonitoring(profile.ip);
+            });
         }, 2000); // Даем время на настройку прокси
     });
 }
@@ -954,67 +999,115 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 // Автоматическое подключение при запуске браузера
 chrome.runtime.onStartup.addListener(async () => {
-    // console.log removed
+    await addLog('INFO', 'SYSTEM', '=== ЗАПУСК БРАУЗЕРА ===');
     
     // Загружаем конфигурацию
     const configLoaded = await loadConfig();
     if (configLoaded) {
-        // console.log removed
+        await addLog('INFO', 'SYSTEM', 'Конфигурация загружена при запуске');
         
         // Проверяем есть ли сохраненная авторизация
-        chrome.storage.local.get(['isAuthenticated', 'authTime'], (result) => {
+        chrome.storage.sync.get(['isAuthenticated', 'currentUser', 'userType'], async (result) => {
             if (!result) {
+                await addLog('WARN', 'AUTH', 'Нет данных авторизации при запуске');
                 return;
             }
             
-            const now = Date.now();
-            const authTime = result.authTime || 0;
-            const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
-            const isAuthValid = !!(result.isAuthenticated && (now - authTime) < sessionTimeout);
-            
-            if (isAuthValid) {
-                // console.log removed
+            if (result.isAuthenticated) {
+                await addLog('INFO', 'AUTH', `Найдена сохраненная авторизация: ${result.userType} - ${result.currentUser?.name}`);
                 setupDirectProxy();
             } else {
-                // console.log removed
+                await addLog('INFO', 'AUTH', 'Пользователь не авторизован при запуске');
             }
         });
     } else {
-        // console.error removed
+        await addLog('ERROR', 'SYSTEM', 'Ошибка загрузки конфигурации при запуске');
+    }
+});
+
+// Восстановление после краша или перезапуска service worker
+self.addEventListener('activate', async (event) => {
+    await addLog('INFO', 'SYSTEM', '=== SERVICE WORKER АКТИВИРОВАН (возможно после краша) ===');
+    
+    // Загружаем конфигурацию
+    const configLoaded = await loadConfig();
+    if (configLoaded) {
+        // Восстанавливаем мониторинг
+        await restoreProxyMonitoring();
+        
+        // Восстанавливаем глобальные переменные из storage
+        const data = await chrome.storage.sync.get(['isAuthenticated', 'userType', 'currentUser', 'currentProfile']);
+        if (data.isAuthenticated) {
+            isAuthenticated = data.isAuthenticated;
+            userType = data.userType;
+            currentUser = data.currentUser;
+            currentProfile = data.currentProfile;
+            
+            await addLog('INFO', 'SYSTEM', `Восстановлены данные: ${data.userType} - ${data.currentUser?.name}`);
+        }
     }
 });
 
 // Восстановление мониторинга при инициализации расширения
 async function restoreProxyMonitoring() {
     try {
-        const data = await chrome.storage.local.get(['proxyEnabled', 'currentProfile', 'proxyStatus', 'isAuthenticated', 'authTime']);
+        await addLog('INFO', 'SYSTEM', 'Попытка восстановления мониторинга');
+        const data = await chrome.storage.sync.get(['proxyEnabled', 'currentProfile', 'proxyStatus', 'isAuthenticated']);
 
         if (!data) {
+            await addLog('WARN', 'SYSTEM', 'Нет данных для восстановления мониторинга');
             return;
         }
 
         // Проверяем авторизацию
-        const now = Date.now();
-        const authTime = data.authTime || 0;
-        const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
-        const isAuthValid = !!(data.isAuthenticated && (now - authTime) < sessionTimeout);
-
-        if (isAuthValid && data.proxyEnabled && data.currentProfile && data.proxyStatus && data.proxyStatus.expectedIP) {
-            // console.log removed
-            // console.log removed
-            // console.log removed
+        if (data.isAuthenticated && data.proxyEnabled && data.currentProfile && data.proxyStatus && data.proxyStatus.expectedIP) {
+            await addLog('INFO', 'PROXY', `Восстановление мониторинга для профиля: ${data.currentProfile}`, {
+                expectedIP: data.proxyStatus.expectedIP
+            });
 
             startProxyMonitoring(data.proxyStatus.expectedIP);
         } else {
-            // console.log removed
+            await addLog('INFO', 'SYSTEM', 'Условия для восстановления мониторинга не выполнены', {
+                isAuthenticated: data.isAuthenticated,
+                proxyEnabled: data.proxyEnabled,
+                hasProfile: !!data.currentProfile
+            });
         }
     } catch (error) {
-        // console.log removed
+        await addLog('ERROR', 'SYSTEM', 'Ошибка восстановления мониторинга', { error: error.message });
     }
 }
 
 // Вызываем восстановление мониторинга при инициализации
 restoreProxyMonitoring();
+
+// Периодическая проверка и восстановление мониторинга (защита от краша service worker)
+setInterval(async () => {
+    try {
+        // Проверяем, должен ли быть активен мониторинг
+        const data = await chrome.storage.sync.get(['isAuthenticated', 'proxyEnabled', 'currentProfile', 'proxyStatus']);
+        
+        if (!data) {
+            return;
+        }
+        
+        // Если пользователь авторизован и прокси должен работать, но мониторинг не запущен
+        if (data.isAuthenticated && data.currentProfile && data.proxyStatus && data.proxyStatus.expectedIP) {
+            // Проверяем, запущен ли мониторинг
+            if (!proxyStatus.checkInterval) {
+                await addLog('WARN', 'SYSTEM', 'Обнаружено отсутствие мониторинга, восстанавливаем', {
+                    expectedIP: data.proxyStatus.expectedIP,
+                    currentProfile: data.currentProfile
+                });
+                
+                // Восстанавливаем мониторинг
+                startProxyMonitoring(data.proxyStatus.expectedIP);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка периодической проверки мониторинга:', error);
+    }
+}, 60000); // Проверяем каждую минуту
 
 // Отслеживание изменений профиля
 chrome.management.onEnabled.addListener(async (info) => {
@@ -1056,7 +1149,7 @@ chrome.proxy.onProxyError.addListener((details) => {
 
     // console.log removed
 
-    chrome.storage.local.get(['proxyEnabled', 'currentProfile'], (result) => {
+    chrome.storage.sync.get(['proxyEnabled', 'currentProfile'], (result) => {
         if (result.proxyEnabled && result.currentProfile) {
             // console.log removed
             return;
@@ -1091,34 +1184,60 @@ chrome.proxy.onProxyError.addListener((details) => {
 // Сообщения от popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'authenticate') {
-        // console.log removed
-        // console.log removed
-        
-        const userInfo = authenticateUser(request.password);
-        // console.log removed
+        // Используем асинхронную обработку
+        (async () => {
+            const userInfo = await authenticateUser(request.password);
 
-        if (!userInfo) {
-            // console.log removed
-            sendResponse({success: false, message: 'Неверный пароль'});
-            return true;
-        }
+            if (!userInfo) {
+                sendResponse({success: false, message: 'Неверный пароль'});
+                return;
+            }
 
-        // console.log removed
+            await completeAuthentication(userInfo, sendResponse);
+        })();
+        return true;
+    }
 
-        completeAuthentication(userInfo, sendResponse);
+    if (request.action === 'getLogs') {
+        // Получить все логи
+        (async () => {
+            const logs = await getAllLogs();
+            sendResponse({ success: true, logs: logs });
+        })();
+        return true;
+    }
+
+    if (request.action === 'clearLogs') {
+        // Очистить логи
+        (async () => {
+            await clearLogs();
+            sendResponse({ success: true, message: 'Логи очищены' });
+        })();
+        return true;
+    }
+
+    if (request.action === 'exportLogs') {
+        // Экспорт логов в текстовый формат
+        (async () => {
+            const logs = await getAllLogs();
+            let logText = '=== ЛОГИ РАСШИРЕНИЯ ===\n\n';
+            logs.forEach(log => {
+                logText += `[${log.timestamp}] [${log.level}] [${log.category}] ${log.message}`;
+                if (log.data) {
+                    logText += `\nДанные: ${log.data}`;
+                }
+                logText += '\n\n';
+            });
+            sendResponse({ success: true, logText: logText });
+        })();
         return true;
     }
 
     if (request.action === 'getProfileInfo') {
-        chrome.storage.local.get(['currentProfile', 'profileInfo', 'userType', 'currentUser', 'isAuthenticated', 'authTime', 'proxyStatus'], (result) => {
+        chrome.storage.sync.get(['currentProfile', 'profileInfo', 'userType', 'currentUser', 'isAuthenticated', 'proxyStatus'], (result) => {
             if (!result) {
                 return;
             }
-            
-            const nowTs = Date.now();
-            const authTime = result.authTime || 0;
-            const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
-            const isAuthValid = !!(result.isAuthenticated && (nowTs - authTime) < sessionTimeout);
 
             // Для админа возвращаем все доступные профили
             let availableProfiles = [];
@@ -1135,7 +1254,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({
                 currentProfile: result.currentProfile,
                 profileInfo: result.profileInfo,
-                isAuthenticated: isAuthValid,
+                isAuthenticated: result.isAuthenticated,
                 userType: result.userType,
                 userName: result.currentUser?.name,
                 availableProfiles: availableProfiles,
@@ -1165,17 +1284,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'switchProfile') {
         if (!isAuthenticated) {
             sendResponse({success: false, message: 'Требуется авторизация'});
-            return;
+            return true;
         }
 
         if (!PROXY_CONFIG) {
             sendResponse({success: false, message: 'Конфигурация не загружена'});
-            return;
+            return true;
         }
 
-        // console.log removed
-        switchProfile(request.profileKey);
-        sendResponse({success: true, message: `Переключен на ${request.profileKey}`});
+        // Используем асинхронную обработку
+        (async () => {
+            await switchProfile(request.profileKey);
+            sendResponse({success: true, message: `Переключен на ${request.profileKey}`});
+        })();
         return true;
     }
 
@@ -1215,7 +1336,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         } else {
             chrome.proxy.settings.clear({scope: 'regular'}, () => {
                 // console.log removed
-                chrome.storage.local.set({proxyEnabled: false});
+                chrome.storage.sync.set({proxyEnabled: false});
                 sendResponse({success: true, message: 'Прокси отключен'});
             });
         }
@@ -1246,7 +1367,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Разблокируем интернет асинхронно
         unblockInternet().then(() => {
             // Обновляем статус в storage
-            chrome.storage.local.set({
+            chrome.storage.sync.set({
                 internetBlocked: false,
                 blockReason: null,
                 blockTime: null
@@ -1262,98 +1383,119 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'logout') {
-        chrome.storage.local.get(['currentProfile'], async (result) => {
-            const profileToRelease = result.currentProfile;
+        (async () => {
+            chrome.storage.sync.get(['currentProfile', 'currentUser'], async (result) => {
+                const profileToRelease = result.currentProfile;
+                const userName = result.currentUser?.name || 'unknown';
 
-            // console.log removed
+                await addLog('AUTH', 'LOGOUT', `Выход пользователя: ${userName}`, { profile: profileToRelease });
 
-            isAuthenticated = false;
-            currentUser = null;
-            userType = null;
-            currentProfile = null;
-            isConnecting = false;
-            connectionRetryCount = 0;
-            lastConnectionAttempt = 0;
+                isAuthenticated = false;
+                currentUser = null;
+                userType = null;
+                currentProfile = null;
+                isConnecting = false;
+                connectionRetryCount = 0;
+                lastConnectionAttempt = 0;
 
-            // Останавливаем мониторинг прокси
-            stopProxyMonitoring();
+                // Останавливаем мониторинг прокси
+                stopProxyMonitoring();
 
-            // Отключаем прокси в браузере
-            chrome.proxy.settings.clear({scope: 'regular'}, async () => {
-                // console.log removed
-                
-                // Снимаем возможную блокировку интернета
-                await unblockInternet();
-                chrome.storage.local.set({
-                    internetBlocked: false,
-                    blockReason: null,
-                    blockTime: null
+                // Отключаем прокси в браузере
+                chrome.proxy.settings.clear({scope: 'regular'}, async () => {
+                    await addLog('INFO', 'PROXY', 'Прокси отключен');
+                    
+                    // Снимаем возможную блокировку интернета
+                    await unblockInternet();
+                    chrome.storage.sync.set({
+                        internetBlocked: false,
+                        blockReason: null,
+                        blockTime: null
+                    });
+
+                    // Обновляем статус в storage
+                    chrome.storage.sync.set({
+                        proxyEnabled: false,
+                        currentProfile: null,
+                        profileInfo: null,
+                        proxyStatus: {
+                            connected: false,
+                            realIP: null,
+                            expectedIP: null,
+                            lastCheck: Date.now()
+                        }
+                    });
                 });
 
-                // Обновляем статус в storage
-                chrome.storage.local.set({
-                    proxyEnabled: false,
-                    currentProfile: null,
-                    profileInfo: null,
-                    proxyStatus: {
-                        connected: false,
-                        realIP: null,
-                        expectedIP: null,
-                        lastCheck: Date.now()
-                    }
-                });
-
-                // Уведомление об отключении отправит мониторинг
-                // console.log removed
+                // Очищаем все данные (кроме логов)
+                chrome.storage.sync.clear();
+                await addLog('INFO', 'AUTH', 'Storage очищен после выхода');
             });
 
-            // Очищаем все данные
-            chrome.storage.local.clear();
-        });
-
-        sendResponse({success: true, message: 'Выход выполнен, прокси отключен'});
+            sendResponse({success: true, message: 'Выход выполнен, прокси отключен'});
+        })();
         return true;
     }
 });
 
 // Функция завершения авторизации
-function completeAuthentication(userInfo, sendResponse) {
+async function completeAuthentication(userInfo, sendResponse) {
     isAuthenticated = true;
     currentUser = userInfo.user;
     userType = userInfo.type;
-    currentProfile = userInfo.profileKey;
 
     isConnecting = false;
     connectionRetryCount = 0;
 
-    chrome.storage.local.remove(['currentProfile', 'profileInfo'], () => {
-        chrome.storage.local.set({
-            isAuthenticated: true,
-            authTime: Date.now(),
-            userType: userInfo.type,
-            currentUser: userInfo.user,
-            currentProfile: userInfo.profileKey,
-            profileInfo: {
-                name: userInfo.user.name,
-                ip: userInfo.user.ip,
-                port: userInfo.user.port,
-                region: userInfo.user.region
-            }
-        }, () => {
-            // console.log removed
-            // console.log removed
+    await addLog('AUTH', 'AUTH', `Завершение авторизации для: ${userInfo.user.name}`, {
+        userType: userInfo.type,
+        profileKey: userInfo.profileKey
+    });
 
-            // Автоматически подключаем прокси только для обычных пользователей
-            if (userInfo.type === 'user') {
+    // Для админа очищаем выбранный профиль, чтобы всегда показывать админский интерфейс
+    if (userInfo.type === 'admin') {
+        currentProfile = null;
+        chrome.storage.sync.remove(['currentProfile', 'profileInfo'], async () => {
+            chrome.storage.sync.set({
+                isAuthenticated: true,
+                userType: 'admin',
+                currentUser: {
+                    name: 'Администратор',
+                    ip: 'Админ',
+                    region: 'Админ',
+                    port: 'Админ'
+                },
+                currentProfile: null, // Админ не имеет предустановленного профиля
+                profileInfo: null
+            }, async () => {
+                await addLog('INFO', 'AUTH', 'Данные авторизации администратора сохранены в storage');
+                await addLog('INFO', 'AUTH', 'Администратор - автоподключение пропущено');
+            });
+        });
+    } else {
+        // Для обычных пользователей сохраняем их профиль
+        currentProfile = userInfo.profileKey;
+        chrome.storage.sync.remove(['currentProfile', 'profileInfo'], async () => {
+            chrome.storage.sync.set({
+                isAuthenticated: true,
+                userType: userInfo.type,
+                currentUser: userInfo.user,
+                currentProfile: userInfo.profileKey,
+                profileInfo: {
+                    name: userInfo.user.name,
+                    ip: userInfo.user.ip,
+                    port: userInfo.user.port,
+                    region: userInfo.user.region
+                }
+            }, async () => {
+                await addLog('INFO', 'AUTH', 'Данные авторизации сохранены в storage');
+                await addLog('INFO', 'PROXY', `Запуск автоподключения прокси для: ${userInfo.user.name}`);
                 setTimeout(() => {
-                    // console.log removed
                     setupDirectProxy(); // Принудительное подключение после авторизации
                 }, 1000);
-            } else {
-                // console.log removed
-            }
+            });
         });
-    });
+    }
 
     sendResponse({
         success: true,
@@ -1375,14 +1517,14 @@ chrome.runtime.onSuspend.addListener(async () => {
         // console.log removed
         // Снимаем возможную блокировку интернета
         await unblockInternet();
-        chrome.storage.local.set({
+        chrome.storage.sync.set({
             internetBlocked: false,
             blockReason: null,
             blockTime: null
         });
     });
 
-    const data = await chrome.storage.local.get(['currentProfile']);
+    const data = await chrome.storage.sync.get(['currentProfile']);
     if (data.currentProfile) {
         // console.log removed
     }
@@ -1399,17 +1541,12 @@ chrome.runtime.onSuspend.addListener(async () => {
         // console.log removed
         
         // Проверяем есть ли сохраненная авторизация
-        chrome.storage.local.get(['isAuthenticated', 'authTime'], (result) => {
+        chrome.storage.sync.get(['isAuthenticated'], (result) => {
             if (!result) {
                 return;
             }
             
-            const now = Date.now();
-            const authTime = result.authTime || 0;
-            const sessionTimeout = 24 * 60 * 60 * 1000; // 24 часа
-            const isAuthValid = !!(result.isAuthenticated && (now - authTime) < sessionTimeout);
-            
-            if (isAuthValid) {
+            if (result.isAuthenticated) {
                 // console.log removed
                 setupDirectProxy();
             } else {

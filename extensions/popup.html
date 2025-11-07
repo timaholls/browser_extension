@@ -430,11 +430,25 @@
 
       <div class="controls" style="flex-wrap: wrap">
         <button class="btn-unblock" id="btnAdminUnblock" style="flex-basis: 100%; margin-bottom: 10px; background: #ff6b35;">🔓 Разблокировать интернет</button>
+        <button class="btn-logs" id="btnViewLogs" style="flex-basis: 100%; margin-bottom: 10px; background: #3742fa;">📋 Показать логи</button>
         <button class="btn-logout" id="btnAdminLogout" style="flex-basis: 100%">Выйти</button>
       </div>
     </div>
 
     <div class="message" id="message"></div>
+  </div>
+
+  <!-- Модальное окно для просмотра логов -->
+  <div id="logsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000;">
+    <div style="background: #2c3e50; color: #ecf0f1; margin: 20px auto; padding: 20px; max-width: 800px; max-height: 80vh; overflow-y: auto; border-radius: 12px;">
+      <h2 style="margin-bottom: 15px; font-size: 18px; border-bottom: 2px solid #3498db; padding-bottom: 10px;">📋 Логи системы</h2>
+      <div style="margin-bottom: 15px;">
+        <button id="btnExportLogs" style="padding: 8px 16px; background: #27ae60; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px;">📥 Экспорт в файл</button>
+        <button id="btnClearLogs" style="padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px;">🗑️ Очистить логи</button>
+        <button id="btnCloseLogs" style="padding: 8px 16px; background: #95a5a6; color: white; border: none; border-radius: 6px; cursor: pointer;">❌ Закрыть</button>
+      </div>
+      <pre id="logsContent" style="background: #34495e; padding: 15px; border-radius: 8px; font-size: 11px; line-height: 1.6; overflow-x: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; word-wrap: break-word;"></pre>
+    </div>
   </div>
 
   <script src="popup.js"></script>

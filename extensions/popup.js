@@ -60,6 +60,55 @@ function showAdminInterface() {
 function updateUI(data) {
   // console.log removed
   
+  // Приоритетная проверка: если админ - всегда показываем админский интерфейс
+  if (data.isAuthenticated && data.userType === 'admin') {
+    // Интерфейс для администратора
+    showAdminInterface();
+    
+    if (adminUserName) adminUserName.textContent = data.userName || 'Администратор';
+
+    // Прячем неиспользуемые кнопки для админа
+    if (btnAdminAuto) btnAdminAuto.style.display = 'none';
+    if (btnAdminSave) btnAdminSave.style.display = 'none';
+    
+    // Обновляем информацию о профиле (если выбран)
+    if (data.profileInfo) {
+      if (adminProxyHost) adminProxyHost.textContent = data.profileInfo.ip;
+      if (adminProxyPort) adminProxyPort.textContent = String(data.profileInfo.port ?? '—');
+      if (adminProxyRegion) adminProxyRegion.textContent = data.profileInfo.region;
+    } else {
+      // Очищаем данные если профиль отсутствует
+      if (adminProxyHost) adminProxyHost.textContent = 'Не подключен';
+      if (adminProxyPort) adminProxyPort.textContent = '-';
+      if (adminProxyRegion) adminProxyRegion.textContent = '-';
+    }
+    
+    // Заполняем список профилей
+    if (adminProfileSelect && data.availableProfiles) {
+      adminProfileSelect.innerHTML = '<option value="">Выберите профиль...</option>';
+      data.availableProfiles.forEach(profile => {
+        const option = document.createElement('option');
+        option.value = profile.key;
+        option.textContent = `${profile.name} (${profile.region})`;
+        if (profile.key === data.currentProfile) {
+          option.selected = true;
+        }
+        adminProfileSelect.appendChild(option);
+      });
+    }
+    
+    // Обновляем статус
+    const isEnabled = data.currentProfile !== null;
+    if (isEnabled) {
+      if (adminStatusText) adminStatusText.textContent = 'Статус: Подключен';
+      if (adminStatusDot) adminStatusDot.classList.add('active');
+    } else {
+      if (adminStatusText) adminStatusText.textContent = 'Статус: Отключен';
+      if (adminStatusDot) adminStatusDot.classList.remove('active');
+    }
+    return; // Выходим, чтобы не выполнять код для пользователя
+  }
+  
   if (data.isAuthenticated) {
     if (data.userType === 'user') {
       // Интерфейс для обычного пользователя
@@ -90,56 +139,6 @@ function updateUI(data) {
         if (userProxyHost) userProxyHost.textContent = 'Не подключен';
         if (userProxyPort) userProxyPort.textContent = '-';
         if (userProxyRegion) userProxyRegion.textContent = '-';
-      }
-      
-    } else if (data.userType === 'admin') {
-      // Интерфейс для администратора
-      // console.log removed
-      showAdminInterface();
-      
-      if (adminUserName) adminUserName.textContent = data.userName || 'Администратор';
-
-      // Прячем неиспользуемые кнопки для админа
-      if (btnAdminAuto) btnAdminAuto.style.display = 'none';
-      if (btnAdminSave) btnAdminSave.style.display = 'none';
-      
-      // Обновляем информацию о профиле
-      if (data.profileInfo) {
-        if (adminProxyHost) adminProxyHost.textContent = data.profileInfo.ip;
-        if (adminProxyPort) adminProxyPort.textContent = String(data.profileInfo.port ?? '—');
-        if (adminProxyRegion) adminProxyRegion.textContent = data.profileInfo.region;
-      } else {
-        // Очищаем данные если профиль отсутствует
-        if (adminProxyHost) adminProxyHost.textContent = 'Не подключен';
-        if (adminProxyPort) adminProxyPort.textContent = '-';
-        if (adminProxyRegion) adminProxyRegion.textContent = '-';
-      }
-      
-      // Заполняем список профилей
-      // console.log removed
-      // console.log removed
-      
-      if (adminProfileSelect && data.availableProfiles) {
-        adminProfileSelect.innerHTML = '<option value="">Выберите профиль...</option>';
-        data.availableProfiles.forEach(profile => {
-          const option = document.createElement('option');
-          option.value = profile.key;
-          option.textContent = `${profile.name} (${profile.region})`;
-          if (profile.key === data.currentProfile) {
-            option.selected = true;
-          }
-          adminProfileSelect.appendChild(option);
-        });
-      }
-      
-      // Обновляем статус
-      const isEnabled = data.currentProfile !== null;
-      if (isEnabled) {
-        if (adminStatusText) adminStatusText.textContent = 'Статус: Подключен';
-        if (adminStatusDot) adminStatusDot.classList.add('active');
-      } else {
-        if (adminStatusText) adminStatusText.textContent = 'Статус: Отключен';
-        if (adminStatusDot) adminStatusDot.classList.remove('active');
       }
     }
   } else {
@@ -667,6 +666,89 @@ if (btnLogin) {
   });
 } else {
   // console.log removed
+}
+
+// Обработчик для кнопки просмотра логов
+const btnViewLogs = document.getElementById('btnViewLogs');
+const logsModal = document.getElementById('logsModal');
+const logsContent = document.getElementById('logsContent');
+const btnCloseLogs = document.getElementById('btnCloseLogs');
+const btnExportLogs = document.getElementById('btnExportLogs');
+const btnClearLogs = document.getElementById('btnClearLogs');
+
+if (btnViewLogs) {
+  btnViewLogs.addEventListener('click', () => {
+    // Запрашиваем логи
+    chrome.runtime.sendMessage({ action: 'getLogs' }, (response) => {
+      if (response && response.success) {
+        const logs = response.logs || [];
+        
+        if (logs.length === 0) {
+          logsContent.textContent = 'Логи отсутствуют';
+        } else {
+          let logText = '';
+          logs.forEach(log => {
+            const timestamp = new Date(log.timestamp).toLocaleString('ru-RU');
+            logText += `[${timestamp}] [${log.level}] [${log.category}] ${log.message}`;
+            if (log.data) {
+              logText += `\n  └─ Данные: ${log.data}`;
+            }
+            logText += '\n\n';
+          });
+          logsContent.textContent = logText;
+        }
+        
+        // Показываем модальное окно
+        logsModal.style.display = 'block';
+      } else {
+        showMessage('Ошибка загрузки логов', 'error');
+      }
+    });
+  });
+}
+
+if (btnCloseLogs) {
+  btnCloseLogs.addEventListener('click', () => {
+    logsModal.style.display = 'none';
+  });
+}
+
+if (btnExportLogs) {
+  btnExportLogs.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'exportLogs' }, (response) => {
+      if (response && response.success) {
+        // Создаем blob и скачиваем файл
+        const blob = new Blob([response.logText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logs_${new Date().toISOString().replace(/:/g, '-')}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showMessage('Логи экспортированы в файл', 'success');
+      } else {
+        showMessage('Ошибка экспорта логов', 'error');
+      }
+    });
+  });
+}
+
+if (btnClearLogs) {
+  btnClearLogs.addEventListener('click', () => {
+    if (confirm('Вы уверены, что хотите очистить все логи?')) {
+      chrome.runtime.sendMessage({ action: 'clearLogs' }, (response) => {
+        if (response && response.success) {
+          logsContent.textContent = 'Логи очищены';
+          showMessage('Логи очищены', 'success');
+        } else {
+          showMessage('Ошибка очистки логов', 'error');
+        }
+      });
+    }
+  });
 }
 
 // Переключение профиля для администратора

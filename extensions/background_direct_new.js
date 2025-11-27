@@ -65,45 +65,45 @@ const EMBEDDED_CONFIG = {
     "user1": {
       "name": "Рус2",
       "proxy": {
-        "host": "195.158.255.144",
-        "port": 60341,
-        "username": "pD3eAehGmG",
-        "password": "M2E7nVW38B"
+        "host": "46.161.30.65",
+        "port": 60514,
+        "username": "DQ5787bQp2",
+        "password": "DSkKs9pX3Q"
       },
-      "ip": "195.158.255.144",
+      "ip": "46.161.30.65",
       "region": "Россия"
     },
     "user2": {
       "name": "Рус3",
       "proxy": {
-        "host": "46.161.31.183",
-        "port": 60888,
-        "username": "4tS4WbbJfG",
-        "password": "ZGVZFcKweB"
+        "host": "46.161.28.224",
+        "port": 61170,
+        "username": "VPQmx42H4D",
+        "password": "WvR7Bcjmpx"
       },
-      "ip": "46.161.31.183",
+      "ip": "46.161.28.224",
       "region": "Россия"
     },
     "user3": {
       "name": "Анж",
       "proxy": {
-        "host": "5.8.16.192",
-        "port": 60345,
-        "username": "8ahPNVHTnC",
-        "password": "7g7ZNvRCZ3"
+        "host": "46.161.30.125",
+        "port": 61185,
+        "username": "2pXwvEJ6rM",
+        "password": "GZFFTxaJY5"
       },
-      "ip": "5.8.16.192",
+      "ip": "46.161.30.125",
       "region": "Россия"
     },
     "user4": {
       "name": "Юли",
       "proxy": {
-        "host": "194.226.247.32",
-        "port": 62498,
-        "username": "U6W2kspYF6",
-        "password": "V7bQPtwG5N"
+        "host": "185.42.27.159",
+        "port": 61975,
+        "username": "8k8keCXeuc",
+        "password": "ZrxUAfsGFp"
       },
-      "ip": "194.226.247.32",
+      "ip": "185.42.27.159",
       "region": "Россия"
     },
   },
@@ -114,7 +114,7 @@ const EMBEDDED_CONFIG = {
     "monitoringInterval": 30000
   },
   "license": {
-    "installDate": "2025-11-06T09:35:50+05:00",
+    "installDate": "2025-11-27T09:35:50+05:00",
     "validDays": 60
   }
 };
